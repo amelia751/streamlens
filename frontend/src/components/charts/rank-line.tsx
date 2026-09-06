@@ -6,13 +6,13 @@ import {
   CartesianGrid,
   ComposedChart,
   Line,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import { compact } from "@/lib/api";
-import { FAINT, INK, LINE, TONES } from "@/lib/theme";
+import { INK, LINE, TONES } from "@/lib/theme";
+import { AXIS_TICK, ChartFrame } from "./frame";
 
 export function RankLine({
   points,
@@ -35,9 +35,14 @@ export function RankLine({
   }));
 
   return (
-    <div className="chart-frame" style={{ height }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={rows} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
+    <ChartFrame height={height}>
+      {({ width, height: h }) => (
+        <ComposedChart
+          width={width}
+          height={h}
+          data={rows}
+          margin={{ top: 12, right: 12, left: 0, bottom: 0 }}
+        >
           <defs>
             <linearGradient id={`${uid}-area`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={TONES.purple} stopOpacity={0.35} />
@@ -51,7 +56,7 @@ export function RankLine({
             axisLine={false}
             interval="preserveStartEnd"
             minTickGap={48}
-            tick={{ fill: FAINT, fontSize: 11, fontWeight: 600 }}
+            tick={AXIS_TICK}
           />
           <YAxis
             dataKey="rank"
@@ -62,7 +67,7 @@ export function RankLine({
             axisLine={false}
             width={36}
             tickFormatter={(v: number) => `#${v}`}
-            tick={{ fill: FAINT, fontSize: 11, fontWeight: 600 }}
+            tick={AXIS_TICK}
           />
           <Tooltip
             cursor={{ stroke: INK, strokeWidth: 1, strokeDasharray: "3 4" }}
@@ -114,12 +119,17 @@ export function RankLine({
                 />
               );
             }}
-            activeDot={{ r: 6, fill: TONES.yellow, stroke: INK, strokeWidth: 1.5 }}
+            activeDot={{
+              r: 6,
+              fill: TONES.yellow,
+              stroke: INK,
+              strokeWidth: 1.5,
+            }}
             animationDuration={1000}
             animationEasing="ease-out"
           />
         </ComposedChart>
-      </ResponsiveContainer>
-    </div>
+      )}
+    </ChartFrame>
   );
 }

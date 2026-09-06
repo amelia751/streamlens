@@ -2,7 +2,7 @@
 
 import {
   CartesianGrid,
-  ResponsiveContainer,
+  Cell,
   Scatter,
   ScatterChart,
   Tooltip,
@@ -11,7 +11,8 @@ import {
   ZAxis,
 } from "recharts";
 import { compact } from "@/lib/api";
-import { FAINT, INK, LINE, TONES } from "@/lib/theme";
+import { INK, LINE, TONES } from "@/lib/theme";
+import { AXIS_TICK, ChartFrame } from "./frame";
 
 export type ScatterPoint = {
   title: string;
@@ -27,39 +28,56 @@ function fillFor(d: ScatterPoint) {
   return TONES.blue;
 }
 
+function rankTicks(worst: number) {
+  const top = Math.max(worst, 4);
+  const step = top <= 6 ? 1 : top <= 12 ? 3 : 5;
+  const ticks = [1];
+  for (let n = 1 + step; n < top; n += step) ticks.push(n);
+  if (ticks[ticks.length - 1] !== top) ticks.push(top);
+  return ticks;
+}
+
 export function MismatchScatter({
   points,
-  height = 320,
+  height = 340,
 }: {
   points: ScatterPoint[];
   height?: number;
 }) {
-  if (points.length < 3) {
+  const rows = points.filter(
+    (p) =>
+      Number.isFinite(p.channels) &&
+      Number.isFinite(p.rank) &&
+      p.channels >= 0 &&
+      p.rank >= 1,
+  );
+
+  if (rows.length < 3) {
     return <p className="empty">Not enough titles to plot the mismatch.</p>;
   }
 
-  const worst = Math.max(...points.map((p) => p.rank), 10);
+  const worst = Math.max(...rows.map((p) => p.rank), 4);
+  const maxCh = Math.max(...rows.map((p) => p.channels), 4);
 
   return (
     <div>
-      <div className="chart-frame" style={{ height }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <ScatterChart margin={{ top: 12, right: 12, left: 0, bottom: 8 }}>
+      <ChartFrame height={height}>
+        {({ width, height: h }) => (
+          <ScatterChart
+            width={width}
+            height={h}
+            margin={{ top: 8, right: 12, left: 4, bottom: 4 }}
+          >
             <CartesianGrid stroke={LINE} strokeDasharray="3 6" />
             <XAxis
               type="number"
               dataKey="channels"
               name="Channels"
+              domain={[0, Math.ceil(maxCh / 4) * 4 || 4]}
+              tickCount={5}
               tickLine={false}
               axisLine={false}
-              tick={{ fill: FAINT, fontSize: 11, fontWeight: 600 }}
-              label={{
-                value: "Promo channels",
-                position: "insideBottom",
-                offset: -2,
-                fill: FAINT,
-                fontSize: 11,
-              }}
+              tick={AXIS_TICK}
             />
             <YAxis
               type="number"
@@ -67,14 +85,15 @@ export function MismatchScatter({
               name="Best rank"
               reversed
               domain={[1, worst]}
+              ticks={rankTicks(worst)}
               allowDecimals={false}
               tickLine={false}
               axisLine={false}
               width={36}
               tickFormatter={(v: number) => `#${v}`}
-              tick={{ fill: FAINT, fontSize: 11, fontWeight: 600 }}
+              tick={AXIS_TICK}
             />
-            <ZAxis type="number" dataKey="hours" range={[40, 280]} />
+            <ZAxis type="number" dataKey="hours" range={[70, 360]} />
             <Tooltip
               cursor={{ stroke: INK, strokeDasharray: "3 4" }}
               content={({ active, payload }) => {
@@ -103,29 +122,20 @@ export function MismatchScatter({
                 );
               }}
             />
-            <Scatter
-              data={points}
-              animationDuration={800}
-              shape={(props) => {
-                const { cx, cy, size, payload } = props;
-                if (cx == null || cy == null) return <g />;
-                const r = Math.max(4, Math.sqrt((size ?? 80) / Math.PI));
-                return (
-                  <circle
-                    cx={cx}
-                    cy={cy}
-                    r={r}
-                    fill={fillFor(payload as ScatterPoint)}
-                    fillOpacity={0.88}
-                    stroke={INK}
-                    strokeWidth={0.8}
-                  />
-                );
-              }}
-            />
+            <Scatter data={rows} animationDuration={700}>
+              {rows.map((p, i) => (
+                <Cell
+                  key={`${p.title}-${i}`}
+                  fill={fillFor(p)}
+                  stroke={INK}
+                  strokeWidth={0.6}
+                />
+              ))}
+            </Scatter>
           </ScatterChart>
-        </ResponsiveContainer>
-      </div>
+        )}
+      </ChartFrame>
+      <p className="chart-axis-note">Horizontal: promo channels · Vertical: best global rank · Area: hours viewed</p>
       <div className="legend">
         <span>
           <i style={{ background: TONES.yellow }} /> Heavy push, weak chart

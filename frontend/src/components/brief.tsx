@@ -36,12 +36,7 @@ export function GreenlightBrief({ title }: { title: string }) {
           <p className="kicker" style={{ marginBottom: 4 }}>
             Gemini · Vertex
           </p>
-          <h2
-            className="m-0 text-[1.2rem] font-bold tracking-tight"
-            style={{
-              fontFamily: "var(--font-cheltenham), Georgia, serif",
-            }}
-          >
+          <h2 className="m-0 text-[0.9375rem] font-semibold tracking-tight">
             Greenlight brief
           </h2>
           <p className="mt-1 max-w-xl text-[0.8125rem] leading-relaxed text-muted">

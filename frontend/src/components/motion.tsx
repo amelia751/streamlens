@@ -17,9 +17,10 @@ export function Reveal({
   return (
     <motion.div
       className={className}
-      initial={reduce ? false : { opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay, ease }}
+      initial={reduce ? false : { y: 10 }}
+      whileInView={{ y: 0 }}
+      viewport={{ once: true, amount: 0.2 }}
+      transition={{ duration: 0.45, delay, ease }}
     >
       {children}
     </motion.div>
@@ -40,7 +41,8 @@ export function Stagger({
     <motion.div
       className={className}
       initial="hidden"
-      animate="show"
+      whileInView="show"
+      viewport={{ once: true, amount: 0.25 }}
       variants={{
         hidden: {},
         show: {
@@ -65,8 +67,8 @@ export function StaggerItem({
     <motion.div
       className={className}
       variants={{
-        hidden: reduce ? { opacity: 1 } : { opacity: 0, y: 12 },
-        show: { opacity: 1, y: 0, transition: { duration: 0.45, ease } },
+        hidden: reduce ? {} : { y: 8 },
+        show: { y: 0, transition: { duration: 0.4, ease } },
       }}
     >
       {children}

@@ -1,17 +1,10 @@
 "use client";
 
 import { useId } from "react";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Area, AreaChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import { commas } from "@/lib/api";
-import { FAINT, INK, LINE, TONES } from "@/lib/theme";
+import { INK, LINE, TONES } from "@/lib/theme";
+import { AXIS_TICK, ChartFrame } from "./frame";
 import { ChartTooltip } from "./tooltip";
 
 function monthLabel(raw: string) {
@@ -54,9 +47,14 @@ export function StackedBars({
 
   return (
     <div>
-      <div className="chart-frame" style={{ height }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+      <ChartFrame height={height}>
+        {({ width, height: h }) => (
+          <AreaChart
+            width={width}
+            height={h}
+            data={rows}
+            margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+          >
             <defs>
               <linearGradient id={`${uid}-shorts`} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={TONES.yellow} stopOpacity={0.95} />
@@ -73,13 +71,13 @@ export function StackedBars({
               tickLine={false}
               axisLine={false}
               interval={tickEvery}
-              tick={{ fill: FAINT, fontSize: 11, fontWeight: 600 }}
+              tick={AXIS_TICK}
             />
             <YAxis
               tickLine={false}
               axisLine={false}
-              width={36}
-              tick={{ fill: FAINT, fontSize: 11, fontWeight: 600 }}
+              width={44}
+              tick={AXIS_TICK}
               tickFormatter={(v: number) => commas(v)}
             />
             <Tooltip
@@ -107,8 +105,8 @@ export function StackedBars({
               animationEasing="ease-out"
             />
           </AreaChart>
-        </ResponsiveContainer>
-      </div>
+        )}
+      </ChartFrame>
       <div className="legend">
         <span>
           <i style={{ background: TONES.yellow }} /> Shorts

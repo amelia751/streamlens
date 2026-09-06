@@ -1,6 +1,6 @@
 "use client";
 
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Cell, Pie, PieChart, Tooltip } from "recharts";
 import { TONES } from "@/lib/theme";
 import { ChartTooltip } from "./tooltip";
 
@@ -23,8 +23,7 @@ export function ShareRing({
 
   return (
     <div className="relative mx-auto" style={{ width: size, height: size }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
+      <PieChart width={size} height={size}>
           <Tooltip content={<ChartTooltip />} />
           <Pie
             data={rows}
@@ -40,17 +39,11 @@ export function ShareRing({
             <Cell fill={TONES.blue} />
           </Pie>
         </PieChart>
-      </ResponsiveContainer>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-        <span
-          className="font-serif text-2xl font-bold leading-none tracking-tight"
-          style={{ fontFamily: "var(--font-cheltenham), Georgia, serif" }}
-        >
+        <span className="text-2xl font-semibold leading-none tracking-tight tabular-nums">
           {pct}%
         </span>
-        <span className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
-          Shorts
-        </span>
+        <span className="mt-1 text-[11px] font-medium text-muted">Shorts</span>
       </div>
     </div>
   );
