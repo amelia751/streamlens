@@ -1,6 +1,7 @@
 import type { Tone } from "@/lib/theme";
 import { TONES } from "@/lib/theme";
 import { SiteNav } from "./nav";
+import { TitleDialogProvider } from "./title-link";
 
 export function Shell({
   title,
@@ -18,30 +19,32 @@ export function Shell({
 }) {
   return (
     <div className="shell">
-      <SiteNav />
+      <TitleDialogProvider>
+        <SiteNav />
 
-      <header className="page-head">
-        {kicker && (
-          <p className="kicker">
-            {tone && (
-              <i className="tone-dot" style={{ background: TONES[tone] }} />
-            )}
-            {kicker}
-          </p>
-        )}
-        <h1>{title}</h1>
-        {lede && <p className="lede">{lede}</p>}
-      </header>
+        <header className="page-head">
+          {kicker && (
+            <p className="kicker">
+              {tone && (
+                <i className="tone-dot" style={{ background: TONES[tone] }} />
+              )}
+              {kicker}
+            </p>
+          )}
+          <h1>{title}</h1>
+          {lede && <p className="lede">{lede}</p>}
+        </header>
 
-      {children}
+        {children}
 
-      <footer className="site-foot">
-        Publicly observed and reconstructed data. Not Netflix ground truth.
-        Netflix Top 10 and engagement figures are published by Netflix; YouTube
-        statistics come from the YouTube Data API and are retained for 30 days
-        under the YouTube API Developer Policies. Ratios and per-clip figures
-        are computed by Streamlens and are not YouTube or Netflix metrics.
-      </footer>
+        <footer className="site-foot">
+          Publicly observed and reconstructed data. Not Netflix ground truth.
+          Netflix Top 10 and engagement figures are published by Netflix; YouTube
+          statistics come from the YouTube Data API and are retained for 30 days
+          under the YouTube API Developer Policies. Ratios and per-clip figures
+          are computed by Streamlens and are not YouTube or Netflix metrics.
+        </footer>
+      </TitleDialogProvider>
     </div>
   );
 }

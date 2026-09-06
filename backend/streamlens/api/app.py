@@ -73,8 +73,12 @@ def run_query(
     title: str | None = None,
     week: str | None = None,
     category: str | None = None,
+    market: str | None = None,
+    kind: str | None = None,
+    search: str | None = Q(None, max_length=120),
     limit: int | None = Q(None, ge=1, le=5000),
-    min_channels: int | None = Q(None, ge=1),
+    min_channels: int | None = Q(None, ge=0),
+    min_weeks: int | None = Q(None, ge=0),
     months: int | None = Q(None, ge=1, le=240),
 ) -> dict[str, Any]:
     try:
@@ -84,7 +88,9 @@ def run_query(
 
     supplied = {
         "title": title, "week": week, "category": category,
-        "limit": limit, "min_channels": min_channels, "months": months,
+        "market": market, "kind": kind, "search": search,
+        "limit": limit, "min_channels": min_channels,
+        "min_weeks": min_weeks, "months": months,
     }
     params = dict(q.defaults)
     for key, value in supplied.items():
@@ -129,3 +135,17 @@ def agent_brief(title: str, evidence: bool = False) -> dict[str, Any]:
     if evidence:
         body["evidence"] = brief.evidence
     return body
+
+
+@app.get("/api/title/artwork")
+def title_artwork(title: str) -> dict[str, Any]:
+    """TMDB poster and backdrop for a title. Token stays on this process."""
+    from streamlens.services.tmdb import title_artwork as lookup
+
+    if not title.strip():
+        raise HTTPException(400, "title is required")
+    try:
+        return lookup(title)
+    except Exception as exc:
+        log.exception("tmdb artwork failed")
+        raise HTTPException(502, f"tmdb unreachable: {exc}") from exc

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Shell, ErrorNote } from "@/components/shell";
-import { Stat } from "@/components/charts";
-import { Reveal, Stagger, StaggerItem } from "@/components/motion";
+import { Stat, Stats } from "@/components/charts";
+import { Reveal } from "@/components/motion";
 import { runQuery, compact, commas } from "@/lib/api";
 import { TONES, type Tone } from "@/lib/theme";
 
@@ -54,40 +54,28 @@ export default async function Home() {
       kicker="Overview"
       lede="A studio-side view assembled from public sources into ClickHouse Cloud and read by a Gemini agent on Google Cloud."
     >
-      <Stagger className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StaggerItem>
-          <Stat
-            label="YouTube channels"
-            value={commas(o.channels)}
-            hint="Netflix-operated, verified"
-            index={0}
-          />
-        </StaggerItem>
-        <StaggerItem>
-          <Stat
-            label="Videos"
-            value={compact(o.videos)}
-            hint={`${compact(o.snapshots)} stat snapshots`}
-            index={1}
-          />
-        </StaggerItem>
-        <StaggerItem>
-          <Stat
-            label="Top 10 titles"
-            value={commas(o.top10_titles)}
-            hint={`${commas(o.countries)} countries`}
-            index={2}
-          />
-        </StaggerItem>
-        <StaggerItem>
-          <Stat
-            label="Linked titles"
-            value={commas(o.linked_titles)}
-            hint="promo ↔ chart"
-            index={3}
-          />
-        </StaggerItem>
-      </Stagger>
+      <Stats>
+        <Stat
+          label="YouTube channels"
+          value={commas(o.channels)}
+          hint="Netflix-operated, verified"
+        />
+        <Stat
+          label="Videos"
+          value={compact(o.videos)}
+          hint={`${compact(o.snapshots)} snapshots`}
+        />
+        <Stat
+          label="Top 10 titles"
+          value={commas(o.top10_titles)}
+          hint={`${commas(o.countries)} countries`}
+        />
+        <Stat
+          label="Linked titles"
+          value={commas(o.linked_titles)}
+          hint="promo ↔ chart"
+        />
+      </Stats>
 
       <p className="kicker">Dashboards</p>
       <Reveal delay={0.1}>

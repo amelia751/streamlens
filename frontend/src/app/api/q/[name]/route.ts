@@ -12,8 +12,12 @@ const ALLOWED = new Set([
   "title",
   "week",
   "category",
+  "market",
+  "kind",
+  "search",
   "limit",
   "min_channels",
+  "min_weeks",
   "months",
 ]);
 

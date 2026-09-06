@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { compact, commas, num } from "@/lib/api";
 import type { Tone } from "@/lib/theme";
 import { TONES } from "@/lib/theme";
+import { TitleLink } from "@/components/title-link";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -22,7 +23,7 @@ export function BarList({
   emptyLabel = "No data yet.",
   tone = "yellow",
 }: {
-  data: { label: string; value: number; note?: string }[];
+  data: { label: string; value: number; note?: string; dossier?: boolean }[];
   format?: BarFormat;
   emptyLabel?: string;
   tone?: Tone;
@@ -48,7 +49,9 @@ export function BarList({
               animate={{ width: `${pct}%` }}
               transition={{ duration: 0.7, delay: i * 0.04, ease }}
             />
-            <span className="bar-label">{d.label}</span>
+            <span className="bar-label">
+              {d.dossier ? <TitleLink title={d.label} /> : d.label}
+            </span>
             {d.note && <span className="bar-note">{d.note}</span>}
             <span className="bar-value">{valueFormat(d.value)}</span>
           </li>

@@ -38,7 +38,12 @@ _TOP10_BY_TITLE = """
         max(cumulative_weeks_in_top_10)     AS weeks_charted,
         sum(weekly_hours_viewed)            AS hours_viewed,
         min(week)                           AS first_week,
-        max(week)                           AS last_week
+        max(week)                           AS last_week,
+        -- The global chart splits four ways: Films/TV crossed with
+        -- English/Non-English. Attributed by the entry that ranked highest,
+        -- since a handful of titles appear in more than one.
+        argMin(category, weekly_rank)       AS category,
+        uniqExact(week)                     AS weeks_present
     FROM landing.netflix_top10_global
     GROUP BY show_title
 """
@@ -76,7 +81,17 @@ QUERIES: dict[str, Query] = {
     # --- 1. The Greenlight Room --------------------------------------------
     "greenlight_board": Query(
         summary="Promo push against Top 10 outcome, one row per title.",
-        defaults={"limit": 50, "min_channels": 1},
+        # The default limit covers every linked title, because the scatter and
+        # the table are driven from one fetch and filtered in the browser.
+        # Filtering server-side per keystroke would mean a round trip for a
+        # dataset that fits comfortably in a single response.
+        defaults={
+            "limit": 2000,
+            "min_channels": 1,
+            "min_weeks": 0,
+            "category": "",
+            "search": "",
+        },
         sql=f"""
         WITH promo AS ({_PROMO_BY_TITLE}), perf AS ({_TOP10_BY_TITLE})
         SELECT
@@ -84,9 +99,12 @@ QUERIES: dict[str, Query] = {
             promo.clips             AS clips,
             promo.channels          AS channels,
             promo.shorts            AS shorts,
+            promo.netflix_title_ids AS netflix_title_ids,
             perf.best_rank          AS best_rank,
             perf.weeks_charted      AS weeks_charted,
+            perf.weeks_present      AS weeks_present,
             perf.hours_viewed       AS hours_viewed,
+            perf.category           AS category,
             perf.first_week         AS first_week,
             perf.last_week          AS last_week,
             -- Reach per unit of promo. Labelled in the UI as a Streamlens
@@ -95,8 +113,26 @@ QUERIES: dict[str, Query] = {
         FROM promo
         INNER JOIN perf ON promo.show_title = perf.show_title
         WHERE promo.channels >= {{min_channels:UInt32}}
+          AND perf.weeks_charted >= {{min_weeks:UInt32}}
+          AND ({{category:String}} = '' OR perf.category = {{category:String}})
+          AND ({{search:String}} = '' OR positionCaseInsensitive(promo.show_title, {{search:String}}) > 0)
         ORDER BY promo.channels DESC, promo.clips DESC
         LIMIT {{limit:UInt32}}
+        """,
+    ),
+    "greenlight_facets": Query(
+        summary="Distinct values available to the Greenlight filter controls.",
+        sql=f"""
+        WITH promo AS ({_PROMO_BY_TITLE}), perf AS ({_TOP10_BY_TITLE})
+        SELECT
+            perf.category   AS category,
+            count()         AS titles,
+            max(promo.channels) AS max_channels,
+            max(perf.weeks_charted) AS max_weeks
+        FROM promo
+        INNER JOIN perf ON promo.show_title = perf.show_title
+        GROUP BY category
+        ORDER BY titles DESC
         """,
     ),
     "greenlight_kpis": Query(
@@ -199,6 +235,7 @@ QUERIES: dict[str, Query] = {
     # --- 3. The Promo Machine ----------------------------------------------
     "promo_channels": Query(
         summary="The 44-channel roster with its latest statistics snapshot.",
+        defaults={"market": "", "kind": "", "search": ""},
         sql="""
         WITH latest AS (
             SELECT
@@ -207,6 +244,15 @@ QUERIES: dict[str, Query] = {
                 argMax(view_count, snapshot_ts)       AS lifetime_views,
                 argMax(video_count, snapshot_ts)      AS videos
             FROM youtube.channel_stats
+            GROUP BY channel_id
+        ),
+        loaded AS (
+            SELECT
+                channel_id,
+                count()                         AS videos_loaded,
+                countIf(is_short)               AS shorts_loaded,
+                countIf(netflix_title_id > 0)   AS catalogue_linked
+            FROM youtube.video FINAL
             GROUP BY channel_id
         )
         SELECT
@@ -217,24 +263,71 @@ QUERIES: dict[str, Query] = {
             c.primary_language AS language,
             latest.subscribers     AS subscribers,
             latest.lifetime_views  AS lifetime_views,
-            latest.videos          AS videos
+            latest.videos          AS videos,
+            loaded.videos_loaded   AS videos_loaded,
+            loaded.shorts_loaded   AS shorts_loaded,
+            loaded.catalogue_linked AS catalogue_linked
         FROM youtube.channel AS c FINAL
         LEFT JOIN latest ON c.channel_id = latest.channel_id
+        LEFT JOIN loaded ON c.channel_id = loaded.channel_id
+        WHERE ({market:String} = '' OR c.market = {market:String})
+          AND ({kind:String} = '' OR c.kind = {kind:String})
+          AND ({search:String} = '' OR positionCaseInsensitive(c.title, {search:String}) > 0)
         ORDER BY subscribers DESC
         """,
     ),
     "promo_cadence": Query(
         summary="Monthly upload volume split by Shorts and long form.",
-        defaults={"months": 36},
+        defaults={"months": 36, "market": "", "kind": ""},
         sql="""
         SELECT
-            toStartOfMonth(published_at) AS month,
-            countIf(is_short)            AS shorts,
-            countIf(NOT is_short)        AS long_form
-        FROM youtube.video FINAL
-        WHERE published_at >= subtractMonths(now(), {months:UInt32})
+            toStartOfMonth(v.published_at) AS month,
+            countIf(v.is_short)            AS shorts,
+            countIf(NOT v.is_short)        AS long_form,
+            countIf(v.netflix_title_id > 0) AS catalogue_linked,
+            count()                        AS total
+        FROM youtube.video AS v FINAL
+        INNER JOIN (SELECT channel_id, market, kind FROM youtube.channel FINAL) AS c
+            ON v.channel_id = c.channel_id
+        WHERE v.published_at >= subtractMonths(now(), {months:UInt32})
+          AND ({market:String} = '' OR c.market = {market:String})
+          AND ({kind:String} = '' OR c.kind = {kind:String})
         GROUP BY month
         ORDER BY month
+        """,
+    ),
+    "promo_cadence_detail": Query(
+        summary="Monthly upload volume broken out by market and channel kind.",
+        # Returned at full grain so the dashboard can pivot it for any market
+        # or kind without another round trip. Around 37 months across ~36
+        # market/kind pairs, so the whole cube is a small response.
+        defaults={"months": 60},
+        sql="""
+        SELECT
+            toStartOfMonth(v.published_at)  AS month,
+            c.market                        AS market,
+            c.kind                          AS kind,
+            countIf(v.is_short)             AS shorts,
+            countIf(NOT v.is_short)         AS long_form,
+            countIf(v.netflix_title_id > 0) AS catalogue_linked
+        FROM youtube.video AS v FINAL
+        INNER JOIN (SELECT channel_id, market, kind FROM youtube.channel FINAL) AS c
+            ON v.channel_id = c.channel_id
+        WHERE v.published_at >= subtractMonths(now(), {months:UInt32})
+        GROUP BY month, market, kind
+        ORDER BY month
+        """,
+    ),
+    "promo_facets": Query(
+        summary="Markets and channel kinds available to the Promo filters.",
+        sql="""
+        SELECT
+            c.market    AS market,
+            c.kind      AS kind,
+            count()     AS channels
+        FROM youtube.channel AS c FINAL
+        GROUP BY market, kind
+        ORDER BY market
         """,
     ),
     "promo_market_mix": Query(

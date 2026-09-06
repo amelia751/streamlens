@@ -79,3 +79,31 @@ export function compact(v: unknown): string {
 export function commas(v: unknown): string {
   return num(v).toLocaleString("en-US");
 }
+
+export type TitleArtwork = {
+  title: string;
+  tmdb_id: number | null;
+  media_type: string | null;
+  year: string | null;
+  overview: string | null;
+  poster_url: string | null;
+  backdrop_url: string | null;
+  vote_average: number | null;
+};
+
+export async function fetchArtwork(title: string): Promise<TitleArtwork> {
+  const res = await fetch(`/api/artwork?title=${encodeURIComponent(title)}`);
+  if (!res.ok) {
+    return {
+      title,
+      tmdb_id: null,
+      media_type: null,
+      year: null,
+      overview: null,
+      poster_url: null,
+      backdrop_url: null,
+      vote_average: null,
+    };
+  }
+  return res.json();
+}

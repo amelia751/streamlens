@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { Shell, ErrorNote } from "@/components/shell";
-import { Panel, Stat, DataTable, BarList, RankLine } from "@/components/charts";
+import { Panel, Stat, Stats, DataTable, BarList, RankLine } from "@/components/charts";
 import { GreenlightBrief } from "@/components/brief";
-import { Reveal, Stagger, StaggerItem } from "@/components/motion";
+import { Reveal } from "@/components/motion";
 import { runQuery, compact, commas, num, str } from "@/lib/api";
 import { ROOMS } from "@/lib/theme";
 
@@ -61,32 +61,20 @@ export default async function TitleDossier({
         </Link>
       </p>
 
-      <Stagger className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-5">
-        <StaggerItem>
-          <Stat
-            label="Best global rank"
-            value={bestRank < 99 ? `#${bestRank}` : "—"}
-            index={3}
-          />
-        </StaggerItem>
-        <StaggerItem>
-          <Stat label="Weeks charted" value={commas(trajectory.length)} index={2} />
-        </StaggerItem>
-        <StaggerItem>
-          <Stat label="Hours viewed" value={compact(hours)} index={0} />
-        </StaggerItem>
-        <StaggerItem>
-          <Stat label="Countries" value={commas(footprint.length)} index={4} />
-        </StaggerItem>
-        <StaggerItem>
-          <Stat
-            label="IMDb"
-            value={imdb ? `${num(imdb.average_rating).toFixed(1)}` : "—"}
-            hint={imdb ? `${compact(imdb.num_votes)} votes` : "no exact title match"}
-            index={1}
-          />
-        </StaggerItem>
-      </Stagger>
+      <Stats>
+        <Stat
+          label="Best global rank"
+          value={bestRank < 99 ? `#${bestRank}` : "—"}
+        />
+        <Stat label="Weeks charted" value={commas(trajectory.length)} />
+        <Stat label="Hours viewed" value={compact(hours)} />
+        <Stat label="Countries" value={commas(footprint.length)} />
+        <Stat
+          label="IMDb"
+          value={imdb ? `${num(imdb.average_rating).toFixed(1)}` : "—"}
+          hint={imdb ? `${compact(imdb.num_votes)} votes` : "no exact title match"}
+        />
+      </Stats>
 
       <Reveal className="mb-6">
         <GreenlightBrief title={title} />
