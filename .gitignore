@@ -29,3 +29,6 @@ data/**/_tmp*/
 node_modules/
 .next/
 *.tsbuildinfo
+.venv/
+__pycache__/
+*.pyc

@@ -1,0 +1,7 @@
+# Runtime deps for the analyst agent on Agent Runtime.
+# mcp is pinned <2 because ADK's MCP client requires it; the ClickHouse MCP
+# server needs mcp 2.x and therefore runs in a separate Cloud Run image.
+google-adk[mcp]>=2.8.0
+mcp>=1.24,<2
+clickhouse-connect>=1.8.0
+python-dotenv>=1.0.1
