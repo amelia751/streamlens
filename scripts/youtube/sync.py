@@ -30,6 +30,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = Path(__file__).resolve().parent / "channels.json"
+# Discovered video ids, so a failed backfill can be retried without paying the
+# crawl quota a second time. Ids only, no video content, so nothing here is
+# subject to the 30-day retention rule.
+CRAWL_CACHE = Path(__file__).resolve().parent / ".crawl-cache.json"
 API = "https://www.googleapis.com/youtube/v3/"
 RSS = "https://www.youtube.com/feeds/videos.xml?channel_id="
 UA = "streamlens-data/0.1 (research; +local)"
@@ -119,6 +123,11 @@ def ch(sql: str, body: bytes | None = None, token: str | None = None) -> str:
     raise SystemExit("clickhouse failed")
 
 
+def ch_rows(sql: str) -> list[str]:
+    """Single-column read, one value per line."""
+    return [x for x in ch(f"{sql} FORMAT TSVRaw").splitlines() if x]
+
+
 def insert(table: str, rows: list[dict], token: str) -> None:
     if not rows:
         return
@@ -202,11 +211,36 @@ def uploads_crawl(playlist_id: str, limit: int | None = None) -> list[str]:
 # hydrate + write
 # --------------------------------------------------------------------------
 
-def hydrate(video_ids: list[str], run_id: str) -> tuple[list[dict], list[dict]]:
-    """videos.list batched 50 IDs to a call. Returns (dimension, snapshot) rows."""
+def hydrate(
+    video_ids: list[str],
+    run_id: str,
+    flush_every: int = 5000,
+) -> tuple[int, int]:
+    """videos.list batched 50 IDs to a call, written out in chunks.
+
+    A full backfill is ~7,300 quota units and the daily allowance is 10,000,
+    so a crash before a single end-of-run insert would burn the day with
+    nothing to show. Rows are flushed every `flush_every` videos instead, and
+    each chunk carries its own dedup token so a rerun is cheap.
+    """
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     dims: list[dict] = []
     stats: list[dict] = []
+    written = linked = chunk = 0
+
+    def flush() -> None:
+        nonlocal dims, stats, written, linked, chunk
+        if not dims:
+            return
+        chunk += 1
+        insert("video", dims, f"{run_id}-video-{chunk}")
+        insert("video_stats", stats, f"{run_id}-video-stats-{chunk}")
+        written += len(dims)
+        linked += sum(1 for d in dims if d["netflix_title_id"])
+        print(f"  progress {written:,}/{len(video_ids):,} videos | {quota_used} units",
+              flush=True)
+        dims, stats = [], []
+
     for i in range(0, len(video_ids), 50):
         batch = video_ids[i:i + 50]
         page = yt("videos", part="snippet,contentDetails,statistics,status",
@@ -260,7 +294,10 @@ def hydrate(video_ids: list[str], run_id: str) -> tuple[list[dict], list[dict]]:
                 "stats_flags": flags,
                 "fetch_run_id": run_id,
             })
-    return dims, stats
+        if len(dims) >= flush_every:
+            flush()
+    flush()
+    return written, linked
 
 
 def sync_channels(registry: dict, run_id: str) -> None:
@@ -345,6 +382,10 @@ def main() -> None:
     ap.add_argument("--plan", action="store_true", help="quota estimate, no API calls")
     ap.add_argument("--backfill", action="store_true", help="crawl full upload history")
     ap.add_argument("--limit-per-channel", type=int, default=None)
+    ap.add_argument("--resume", action="store_true",
+                    help="reuse cached crawl ids instead of paying for the crawl again")
+    ap.add_argument("--skip-hydrated", action="store_true",
+                    help="drop ids already present in youtube.video")
     args = ap.parse_args()
 
     registry = json.loads(REGISTRY.read_text())
@@ -360,11 +401,22 @@ def main() -> None:
     sync_channels(registry, run_id)
 
     if args.backfill:
+        # Crawling every uploads playlist costs about as much as hydrating the
+        # result, and the daily allowance only covers doing each once. Losing
+        # the crawl to a crash later in the run means the backfill cannot be
+        # retried until quota resets, so the ids are written to disk as soon
+        # as they are known and reused on the next attempt.
         targets: list[str] = []
-        for c in registry["channels"]:
-            ids = uploads_crawl(c["uploads_playlist_id"], args.limit_per_channel)
-            print(f"  {c['handle']:28s} {len(ids):>6,} videos")
-            targets += ids
+        if args.resume and CRAWL_CACHE.exists():
+            targets = json.loads(CRAWL_CACHE.read_text())
+            print(f"  resumed {len(targets):,} ids from {CRAWL_CACHE.name} (0 units)",
+                  flush=True)
+        else:
+            for c in registry["channels"]:
+                ids = uploads_crawl(c["uploads_playlist_id"], args.limit_per_channel)
+                print(f"  {c['handle']:28s} {len(ids):>6,} videos", flush=True)
+                targets += ids
+                CRAWL_CACHE.write_text(json.dumps(targets))
     else:
         seen: list[str] = []
         for c in registry["channels"]:
@@ -374,16 +426,21 @@ def main() -> None:
             seen += ids
         due = due_video_ids()
         targets = list(dict.fromkeys(seen + due))
-        print(f"  discovery {len(seen)} via RSS (0 units), {len(due)} due for refresh")
+        print(f"  discovery {len(seen)} via RSS (0 units), {len(due)} due for refresh",
+              flush=True)
 
-    print(f"hydrating {len(targets):,} videos")
-    dims, stats = hydrate(targets, run_id)
-    insert("video", dims, f"{run_id}-video")
-    insert("video_stats", stats, f"{run_id}-video-stats")
+    if args.skip_hydrated:
+        before = len(targets)
+        have = set(ch_rows("SELECT video_id FROM youtube.video FINAL"))
+        targets = [v for v in targets if v not in have]
+        print(f"  skipping {before - len(targets):,} already hydrated", flush=True)
 
-    linked = sum(1 for d in dims if d["netflix_title_id"])
+    print(f"hydrating {len(targets):,} videos "
+          f"(~{-(-len(targets) // 50):,} units)", flush=True)
+    written, linked = hydrate(targets, run_id)
+
     print(f"\nquota {quota_used} units | {time.time() - started:.0f}s")
-    print(f"netflix_title_id on {linked:,}/{len(dims):,} videos")
+    print(f"netflix_title_id on {linked:,}/{written:,} videos")
 
 
 if __name__ == "__main__":

@@ -81,7 +81,10 @@ CREATE TABLE IF NOT EXISTS youtube.video
     is_deleted          UInt8 DEFAULT 0
 )
 ENGINE = ReplacingMergeTree(fetched_at, is_deleted)
-PARTITION BY toYYYYMM(published_at)
+-- Not partitioned by month. Uploads run from 2006 to now, so monthly
+-- partitions give ~240 near-empty parts on a table of a few hundred thousand
+-- rows, and any backfill insert immediately trips max_partitions_per_insert_block.
+PARTITION BY tuple()
 ORDER BY video_id
 TTL fetched_at + INTERVAL 30 DAY;
 

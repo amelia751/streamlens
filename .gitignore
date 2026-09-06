@@ -32,3 +32,4 @@ node_modules/
 .venv/
 __pycache__/
 *.pyc
+scripts/youtube/.crawl-cache.json

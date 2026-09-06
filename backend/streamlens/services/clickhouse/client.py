@@ -7,10 +7,32 @@ through the MCP toolset in `mcp.py` instead.
 
 from __future__ import annotations
 
+import threading
+
 import clickhouse_connect
 from clickhouse_connect.driver.client import Client
 
 from streamlens.config import clickhouse_settings
+
+_local = threading.local()
+
+
+def shared_client() -> Client:
+    """A client bound to the calling thread.
+
+    A clickhouse-connect client carries a server-side session, and a session
+    rejects concurrent queries outright. The dashboards fetch four or five
+    tiles at once, so a single process-wide client fails as soon as two of
+    those land together, while a client per request throws away the
+    connection and the server metadata handshake every time. One per thread
+    sits between the two: FastAPI runs sync endpoints on a bounded threadpool,
+    so this settles into a small, reused pool.
+    """
+    client = getattr(_local, "client", None)
+    if client is None:
+        client = get_client()
+        _local.client = client
+    return client
 
 
 def get_client() -> Client:
