@@ -1,0 +1,31 @@
+# Local Cursor rules (key paths, machine-specific)
+.cursor/rules/
+
+# Credentials — never commit
+secrets/
+**/*-sa.json
+**/gcp-owner.json
+**/gcp*.json
+
+# Isolated gcloud CLI state (do not use ~/.config/gcloud)
+.gcloud/
+
+# Downloaded dumps — scripts and READMEs stay tracked
+data/**/*.xlsx
+data/**/*.xls
+data/**/*.tsv
+data/**/*.tsv.gz
+data/**/*.csv
+data/**/*.zip
+data/**/*.gz
+data/**/*.json
+data/**/_tmp*/
+
+.DS_Store
+.env
+.env.*
+
+# App
+node_modules/
+.next/
+*.tsbuildinfo

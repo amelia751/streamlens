@@ -1,0 +1,6 @@
+# Keep scripts + READMEs. Ignore downloaded dumps.
+*
+!*/
+!README.md
+!download.py
+!.gitignore
