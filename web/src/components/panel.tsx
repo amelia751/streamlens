@@ -11,8 +11,8 @@
 import { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts";
 
-import type { Panel, PanelData } from "@/lib/api";
-import { chartOption, statValue } from "@/lib/chart";
+import type { Panel, PanelData, ValueFormat } from "@/lib/api";
+import { chartOption, formatValue, statNumber, statValue } from "@/lib/chart";
 
 function useResize(
   ref: React.RefObject<HTMLDivElement | null>,
@@ -57,11 +57,52 @@ function Chart({ data }: { data: PanelData }) {
   return <div className="tile-chart" ref={box} />;
 }
 
+/**
+ * Counts up to the figure instead of just appearing as it.
+ *
+ * A stat sitting next to charts that draw themselves in looks broken if it
+ * is the one static thing on the grid. Every state change happens inside
+ * the frame callback, so the first painted value is near zero rather than
+ * the answer.
+ */
+function CountUp({ value, format }: { value: number; format: ValueFormat }) {
+  const [shown, setShown] = useState(0);
+
+  useEffect(() => {
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const started = performance.now();
+    let frame = 0;
+
+    const tick = (now: number) => {
+      if (still) {
+        setShown(value);
+        return;
+      }
+      const progress = Math.min(1, (now - started) / 900);
+      // Cubic ease-out, the same curve the charts enter on.
+      setShown(value * (1 - (1 - progress) ** 3));
+      if (progress < 1) frame = requestAnimationFrame(tick);
+    };
+
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [value]);
+
+  return <>{formatValue(shown, format)}</>;
+}
+
 function StatBlock({ data }: { data: PanelData }) {
+  const frame = { columns: data.columns, rows: data.rows };
+  const value = statNumber(frame, data.panel.spec);
+
   return (
     <div className="tile-stat">
       <span className="tile-stat-value">
-        {statValue({ columns: data.columns, rows: data.rows }, data.panel.spec)}
+        {value === null ? (
+          statValue(frame, data.panel.spec)
+        ) : (
+          <CountUp value={value} format={data.panel.spec.format} />
+        )}
       </span>
     </div>
   );

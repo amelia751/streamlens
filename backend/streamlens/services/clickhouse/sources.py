@@ -28,13 +28,19 @@ SOURCE_KIND_LABELS = {
     "kinesis": "Kinesis",
 }
 
+VENDOR_DETAIL = {
+    "gcs": "ClickPipe from Google Cloud Storage",
+    "s3": "ClickPipe from Amazon S3",
+    "azure": "ClickPipe from Azure Blob Storage",
+}
+
 
 def _clickpipe_sources(databases: list[DatabaseInfo]) -> list[dict]:
     rows_by_table = table_rows_index(databases)
-    groups: dict[str, list[dict]] = {}
+    groups: dict[tuple[str, str | None], list[dict]] = {}
 
     for pipe in list_clickpipes():
-        groups.setdefault(pipe.source_kind, []).append(
+        groups.setdefault((pipe.source_kind, pipe.vendor), []).append(
             {
                 "name": pipe.name,
                 "state": pipe.state,
@@ -45,17 +51,23 @@ def _clickpipe_sources(databases: list[DatabaseInfo]) -> list[dict]:
         )
 
     sources = []
-    for kind, streams in sorted(groups.items()):
+    for (kind, vendor), streams in sorted(groups.items()):
         states = {s["state"] for s in streams}
+        suffix = f"-{vendor}" if vendor else ""
         sources.append(
             {
-                "id": f"clickpipe-{kind}",
+                "id": f"clickpipe-{kind}{suffix}",
                 "mechanism": "ClickPipe",
+                "vendor": vendor,
                 "label": SOURCE_KIND_LABELS.get(kind, kind),
                 # One state when every pipe agrees, otherwise say so rather
                 # than silently reporting the first pipe's status.
                 "state": states.pop() if len(states) == 1 else "Mixed",
-                "detail": "Managed ingestion from Google Cloud Storage",
+                "detail": VENDOR_DETAIL.get(
+                    vendor or "", "Managed object-storage ingestion"
+                )
+                if kind == "objectStorage"
+                else SOURCE_KIND_LABELS.get(kind, kind),
                 "rows": sum(s["rows"] for s in streams),
                 "streams": sorted(streams, key=lambda s: s["name"]),
             }
@@ -83,6 +95,7 @@ def _youtube_source(databases: list[DatabaseInfo]) -> dict | None:
     return {
         "id": "youtube-api",
         "mechanism": "API poll",
+        "vendor": None,
         "label": "YouTube Data API",
         "state": "Live",
         "detail": "Written directly, 30-day TTL — never lands in object storage",

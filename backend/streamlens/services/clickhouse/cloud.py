@@ -21,6 +21,7 @@ class ClickPipe:
     name: str
     state: str
     source_kind: str
+    vendor: str | None
     database: str
     table: str
 
@@ -31,6 +32,34 @@ def _source_kind(source: dict) -> str:
         if isinstance(value, dict) and value:
             return key
     return "unknown"
+
+
+def _object_vendor(source: dict) -> str | None:
+    """Which cloud an objectStorage pipe reads, from its type or URL host.
+
+    Credentials stay out of this — only the type tag and the host of the
+    object URL are used.
+    """
+    obj = source.get("objectStorage")
+    if not isinstance(obj, dict) or not obj:
+        return None
+
+    raw = str(obj.get("type") or "").lower()
+    if raw in {"gcs", "google", "gcp"}:
+        return "gcs"
+    if raw in {"s3", "aws", "amazon"}:
+        return "s3"
+    if "azure" in raw:
+        return "azure"
+
+    url = str(obj.get("url") or "")
+    if "storage.googleapis.com" in url or url.startswith("gs://"):
+        return "gcs"
+    if "amazonaws.com" in url or url.startswith("s3://"):
+        return "s3"
+    if "blob.core.windows.net" in url:
+        return "azure"
+    return None
 
 
 def list_clickpipes() -> list[ClickPipe]:
@@ -49,11 +78,13 @@ def list_clickpipes() -> list[ClickPipe]:
     pipes = []
     for entry in response.json().get("result", []):
         destination = entry.get("destination", {})
+        source = entry.get("source", {})
         pipes.append(
             ClickPipe(
                 name=entry.get("name", ""),
                 state=entry.get("state", "Unknown"),
-                source_kind=_source_kind(entry.get("source", {})),
+                source_kind=_source_kind(source),
+                vendor=_object_vendor(source),
                 database=destination.get("database", ""),
                 table=destination.get("table", ""),
             )

@@ -134,9 +134,8 @@ export function Canvas() {
         </p>
         <h1>The warehouse, and what you build from it</h1>
         <p className="lede">
-          The rail is a live mirror of ClickHouse Cloud — every pipe, every
-          table. Open one to read it, or ask the curator for a dashboard and
-          watch it get built on this canvas.
+          Dashboards you have asked for, and the tables they read. Open a
+          table to inspect it, or ask the curator to build a new view.
         </p>
       </div>
     );
@@ -148,7 +147,9 @@ export function Canvas() {
         {tabs.map((tab) => (
           <div
             key={tab.id}
-            className={`tab${tab.id === activeId ? " on" : ""}`}
+            className={`tab${tab.id === activeId ? " on" : ""}${
+              tab.kind === "dashboard" ? " is-dash" : ""
+            }`}
             onClick={() => activate(tab.id)}
             role="tab"
             aria-selected={tab.id === activeId}

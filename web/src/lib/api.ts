@@ -15,9 +15,12 @@ export type Stream = {
   rows: number;
 };
 
+export type SourceVendor = "gcs" | "s3" | "azure";
+
 export type Source = {
   id: string;
   mechanism: string;
+  vendor?: SourceVendor | null;
   label: string;
   state: string;
   detail: string;
@@ -227,12 +230,9 @@ export async function fetchArtwork(title: string): Promise<TitleArtwork> {
   return res.json();
 }
 
-export async function fetchWarehouse(
-  // The catalog moves when a pipe runs or the poller syncs, not per request.
-  revalidate = 60,
-): Promise<Warehouse> {
+export async function fetchWarehouse(): Promise<Warehouse> {
   const res = await fetch(`${BACKEND_URL}/api/warehouse`, {
-    next: { revalidate },
+    cache: "no-store",
   });
   if (!res.ok) {
     throw new Error(`warehouse ${res.status}: ${await res.text()}`);

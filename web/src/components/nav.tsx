@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const LINKS = [
-  { href: "/rooms/greenlight", label: "Greenlight" },
-  { href: "/rooms/rollout", label: "Rollout" },
-  { href: "/rooms/promo", label: "Promo" },
-  { href: "/studio", label: "Studio" },
+import { ROOMS, type Tone } from "@/lib/theme";
+
+const LINKS: { href: string; label: string; tone: Tone }[] = [
+  { href: "/rooms/greenlight", label: "Greenlight", tone: ROOMS.greenlight.tone },
+  { href: "/rooms/rollout", label: "Rollout", tone: ROOMS.rollout.tone },
+  { href: "/rooms/promo", label: "Promo", tone: ROOMS.promo.tone },
+  { href: "/studio", label: "Studio", tone: ROOMS.studio.tone },
 ];
 
 export function SiteNav() {
@@ -23,7 +25,9 @@ export function SiteNav() {
           <Link
             key={n.href}
             href={n.href}
-            className={path.startsWith(n.href) ? "on" : undefined}
+            className={
+              path.startsWith(n.href) ? `on tone-${n.tone}` : undefined
+            }
           >
             {n.label}
           </Link>
