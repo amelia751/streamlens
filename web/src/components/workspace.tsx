@@ -21,13 +21,15 @@ import type { TablePreview } from "@/lib/api";
 
 export type Tab =
   | { kind: "table"; id: string; database: string; table: string; label: string }
-  | { kind: "dashboard"; id: string; dashboardId: string; label: string };
+  | { kind: "dashboard"; id: string; dashboardId: string; label: string }
+  | { kind: "proposal"; id: string; proposalId: string; label: string };
 
 type WorkspaceValue = {
   tabs: Tab[];
   activeId: string | null;
   openTable: (database: string, table: string) => void;
   openDashboard: (dashboardId: string, title: string) => void;
+  openProposal: (proposalId: string, title: string) => void;
   closeTab: (id: string) => void;
   activate: (id: string) => void;
   cached: (id: string) => TablePreview | undefined;
@@ -86,6 +88,17 @@ export function Workspace({ children }: { children: React.ReactNode }) {
     [open],
   );
 
+  const openProposal = useCallback(
+    (proposalId: string, title: string) =>
+      open({
+        kind: "proposal",
+        id: `proposal:${proposalId}`,
+        proposalId,
+        label: title,
+      }),
+    [open],
+  );
+
   const closeTab = useCallback((id: string) => {
     setTabs((current) => {
       const index = current.findIndex((tab) => tab.id === id);
@@ -127,6 +140,7 @@ export function Workspace({ children }: { children: React.ReactNode }) {
       activeId,
       openTable,
       openDashboard,
+      openProposal,
       closeTab,
       activate: setActiveId,
       cached: (id) => previews.current.get(id),
@@ -136,7 +150,16 @@ export function Workspace({ children }: { children: React.ReactNode }) {
       revision,
       touchDashboard,
     }),
-    [tabs, activeId, openTable, openDashboard, closeTab, revision, touchDashboard],
+    [
+      tabs,
+      activeId,
+      openTable,
+      openDashboard,
+      openProposal,
+      closeTab,
+      revision,
+      touchDashboard,
+    ],
   );
 
   return (

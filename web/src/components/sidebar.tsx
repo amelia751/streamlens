@@ -15,6 +15,7 @@ import type {
   SourceVendor,
   Warehouse,
 } from "@/lib/api";
+import type { ProposalSummary } from "@/lib/proposals";
 import { commas, compact, since } from "@/lib/format";
 import { useWorkspace } from "@/components/workspace";
 import type { Tone } from "@/lib/theme";
@@ -429,6 +430,59 @@ function DashboardRow({
   );
 }
 
+function useProposals(): ProposalSummary[] {
+  const [proposals, setProposals] = useState<ProposalSummary[]>([]);
+
+  useEffect(() => {
+    let dropped = false;
+    fetch("/api/mock/proposals")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (dropped || !body) return;
+        setProposals(body.proposals ?? []);
+      })
+      .catch(() => undefined);
+    return () => {
+      dropped = true;
+    };
+  }, []);
+
+  return proposals;
+}
+
+function ProposalRow({ proposal }: { proposal: ProposalSummary }) {
+  const { openProposal, activeId } = useWorkspace();
+  const on = activeId === `proposal:${proposal.id}`;
+
+  return (
+    <li className={`rail-dash-row${on ? " on" : ""}`}>
+      <button
+        type="button"
+        className={`rail-dash${on ? " on" : ""}`}
+        onClick={() => openProposal(proposal.id, proposal.title)}
+        title={proposal.kicker}
+      >
+        <span className="rail-dash-title">{proposal.title}</span>
+        <span className="rail-badge">{proposal.genre}</span>
+      </button>
+    </li>
+  );
+}
+
+function ProposalList({ proposals }: { proposals: ProposalSummary[] }) {
+  if (proposals.length === 0) {
+    return <p className="rail-empty">Ask the analyst for a theme.</p>;
+  }
+
+  return (
+    <ul className="rail-dashes">
+      {proposals.map((proposal) => (
+        <ProposalRow key={proposal.id} proposal={proposal} />
+      ))}
+    </ul>
+  );
+}
+
 function DashboardList({
   dashboards,
   onDeleted,
@@ -466,6 +520,7 @@ export function Sidebar({
   error?: string;
 }) {
   const { dashboards, drop, restore } = useDashboards(initialDashboards);
+  const proposals = useProposals();
 
   return (
     <aside className="rail">
@@ -488,6 +543,13 @@ export function Sidebar({
               onDeleted={drop}
               onRestore={restore}
             />
+          </div>
+        </section>
+
+        <section className="rail-pane is-proposals">
+          <h2 className="rail-label">Proposals</h2>
+          <div className="rail-pane-body">
+            <ProposalList proposals={proposals} />
           </div>
         </section>
 

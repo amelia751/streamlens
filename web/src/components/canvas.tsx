@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import type { TablePreview } from "@/lib/api";
 import { commas } from "@/lib/format";
 import { DashboardView } from "@/components/dashboard";
+import { ProposalView } from "@/components/proposal";
 import { useWorkspace } from "@/components/workspace";
 
 function cellText(value: unknown): string {
@@ -146,7 +147,11 @@ export function Canvas() {
           <div
             key={tab.id}
             className={`tab${tab.id === activeId ? " on" : ""}${
-              tab.kind === "dashboard" ? " is-dash" : ""
+              tab.kind === "dashboard"
+                ? " is-dash"
+                : tab.kind === "proposal"
+                  ? " is-proposal"
+                  : ""
             }`}
             onClick={() => activate(tab.id)}
             role="tab"
@@ -156,6 +161,7 @@ export function Canvas() {
           >
             <span className="tab-name" title={tab.label}>
               {tab.kind === "dashboard" && <span className="tab-kind">▦</span>}
+              {tab.kind === "proposal" && <span className="tab-kind">≡</span>}
               {tab.label}
             </span>
             <button
@@ -183,6 +189,9 @@ export function Canvas() {
       )}
       {active?.kind === "dashboard" && (
         <DashboardView key={active.id} dashboardId={active.dashboardId} />
+      )}
+      {active?.kind === "proposal" && (
+        <ProposalView key={active.id} proposalId={active.proposalId} />
       )}
     </div>
   );
