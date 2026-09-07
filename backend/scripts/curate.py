@@ -62,6 +62,8 @@ async def main(prompts: list[str]) -> None:
                     print(f"{CYAN}  → code{OFF}\n{_short(part.executable_code.code)}")
                 elif part.code_execution_result:
                     print(f"{GREEN}  ← {OFF}{_short(str(part.code_execution_result.output))}")
+                elif getattr(part, "thought", None) and part.text:
+                    print(f"{GREY}  · {part.text}{OFF}")
                 elif part.text and event.author != "user":
                     print(part.text, end="")
 

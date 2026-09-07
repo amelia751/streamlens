@@ -37,7 +37,9 @@ ACTIVITY = {
     "list_tables": "reading table schemas",
     "run_select_query": "querying ClickHouse",
     "run_query": "querying ClickHouse",
+    "warehouse_overview": "reading the warehouse",
     "preview_query": "checking a query",
+    "read_panels": "reading the charts",
     "list_dashboards": "looking at your dashboards",
     "get_dashboard": "reading the dashboard",
     "create_dashboard": "creating the dashboard",
@@ -46,6 +48,8 @@ ACTIVITY = {
     "add_panel": "adding a panel",
     "update_panel": "updating a panel",
     "delete_panel": "removing a panel",
+    "google_search": "searching the web",
+    "google_search_agent": "searching the web",
 }
 
 # Conversation history outlives any one turn; the MCP connections do not.
@@ -164,6 +168,9 @@ async def stream_turn(
                                 yield _sse(
                                     {"type": "canvas", "dashboard_id": touched}
                                 )
+
+                    elif getattr(part, "thought", None) and part.text:
+                        yield _sse({"type": "thought", "text": part.text})
 
                     elif part.text and event.author != "user":
                         yield _sse({"type": "text", "text": part.text})

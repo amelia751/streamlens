@@ -123,25 +123,20 @@ export function RolloutAtlas({
 
       <div style={{ opacity: pending ? 0.55 : 1, transition: "opacity .15s" }}>
         <Stats>
+          <Stat label="Countries" value={commas(countries)} hint={week} />
+          <Stat label="Titles" value={commas(byTitle.length)} />
+          <Stat label="Placements" value={commas(filtered.length)} />
           <Stat
-            label="Countries charting"
-            value={commas(countries)}
-            hint={`week of ${week}`}
-          />
-          <Stat label="Distinct titles" value={commas(byTitle.length)} />
-          <Stat label="Chart entries" value={commas(filtered.length)} />
-          <Stat
-            label="Widest #1"
+            label="Biggest #1"
             value={commas(Math.max(...byTitle.map((t) => t.firsts), 0))}
-            hint="countries"
           />
         </Stats>
 
-        <div className="mb-5 grid gap-4 lg:grid-cols-2">
+        <div className="mb-3 grid gap-3 lg:grid-cols-2">
           <Reveal>
             <Panel
-              title="Widest reach"
-              subtitle="Countries where the title appeared anywhere in the Top 10 this week."
+              title="Countries in the Top 10"
+              subtitle="How many countries a title appeared in this week, anywhere in the list."
             >
               <BarList
                 tone="blue"
@@ -159,8 +154,8 @@ export function RolloutAtlas({
 
           <Reveal delay={0.08}>
             <Panel
-              title="Number one, by country"
-              subtitle="Who took the top slot where."
+              title="#1 by country"
+              subtitle="The title that sat at number one in each country this week."
             >
               <SortableTable
                 rows={numberOnes}
@@ -183,8 +178,8 @@ export function RolloutAtlas({
 
         <Reveal delay={0.12}>
           <Panel
-            title="Full country chart"
-            subtitle={`All Top 10 placements for ${category} in the week of ${week}.`}
+            title="Placements"
+            subtitle={`Every Top 10 row for ${category} in the week of ${week}.`}
           >
             <SortableTable
               rows={filtered}

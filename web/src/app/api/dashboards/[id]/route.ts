@@ -17,18 +17,22 @@ export async function GET(
   try {
     const res = await fetch(`${BACKEND_URL}/api/dashboards/${id}`, {
       cache: "no-store",
+      signal: _req.signal,
     });
     return new NextResponse(await res.text(), {
       status: res.status,
       headers: { "content-type": "application/json" },
     });
   } catch {
+    if (_req.signal.aborted) {
+      return new NextResponse(null, { status: 499 });
+    }
     return NextResponse.json({ error: "backend unreachable" }, { status: 502 });
   }
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
   const { id } = await ctx.params;
@@ -39,12 +43,17 @@ export async function DELETE(
   try {
     const res = await fetch(`${BACKEND_URL}/api/dashboards/${id}`, {
       method: "DELETE",
+      cache: "no-store",
+      signal: req.signal,
     });
     return new NextResponse(await res.text(), {
       status: res.status,
       headers: { "content-type": "application/json" },
     });
   } catch {
+    if (req.signal.aborted) {
+      return new NextResponse(null, { status: 499 });
+    }
     return NextResponse.json({ error: "backend unreachable" }, { status: 502 });
   }
 }

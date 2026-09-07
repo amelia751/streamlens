@@ -121,23 +121,11 @@ export function GreenlightBoard({
   return (
     <>
       <Stats>
-        <Stat label="Titles" value={commas(kpis.titles)} hint="promo ↔ Top 10" />
-        <Stat label="Promo clips" value={commas(kpis.clips)} />
-        <Stat
-          label="Widest campaign"
-          value={`${commas(kpis.widest)} ch`}
-          hint="of 44 channels"
-        />
-        <Stat
-          label="Reached #1"
-          value={commas(kpis.numberOne)}
-          hint="global weekly rank"
-        />
-        <Stat
-          label="Hours viewed"
-          value={compact(kpis.hours)}
-          hint="Netflix published"
-        />
+        <Stat label="Titles" value={commas(kpis.titles)} />
+        <Stat label="Clips" value={commas(kpis.clips)} />
+        <Stat label="Most channels" value={commas(kpis.widest)} />
+        <Stat label="#1" value={commas(kpis.numberOne)} />
+        <Stat label="Hours viewed" value={compact(kpis.hours)} />
       </Stats>
 
       <ControlBar
@@ -178,20 +166,20 @@ export function GreenlightBoard({
         />
       </ControlBar>
 
-      <Reveal className="mb-5">
+      <Reveal className="mb-3">
         <Panel
-          title="Push against outcome"
-          subtitle="Channels behind a title vs hours viewed."
+          title="Channels vs hours"
+          subtitle="Each point is a title. Right is more channels behind it; up is more hours viewed."
         >
           <MismatchScatter points={scatter} onSelectTitle={open} />
         </Panel>
       </Reveal>
 
-      <div className="mb-5 grid gap-4 lg:grid-cols-2">
+      <div className="mb-3 grid gap-3 lg:grid-cols-2">
         <Reveal delay={0.06}>
           <Panel
-            title="Heavy push, weak chart"
-            subtitle="Promoted across three or more channels but never broke the global top 3."
+            title="3+ channels, missed top 3"
+            subtitle="Promoted on three or more channels and never reached the global top 3."
           >
             <BarList
               tone="yellow"
@@ -209,8 +197,8 @@ export function GreenlightBoard({
 
         <Reveal delay={0.1}>
           <Panel
-            title="Most reach per clip"
-            subtitle="Hours viewed per promo clip, among titles that charted three weeks."
+            title="Hours per clip"
+            subtitle="Hours viewed divided by promo clips. Only titles that lasted three weeks or more."
           >
             <BarList
               tone="green"
@@ -228,8 +216,8 @@ export function GreenlightBoard({
 
       <Reveal delay={0.14}>
         <Panel
-          title="Campaign board"
-          subtitle="Select a title to open its dossier."
+          title="Titles"
+          subtitle="Click a title for its country chart, clips, and the channels that ran it."
         >
           <SortableTable
             rows={rows}

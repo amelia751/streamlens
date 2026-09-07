@@ -15,7 +15,7 @@ import remarkGfm from "remark-gfm";
 import { useWorkspace } from "@/components/workspace";
 
 type Message = {
-  role: "user" | "agent";
+  role: "user" | "agent" | "thought";
   text: string;
 };
 
@@ -91,6 +91,18 @@ export function Chat() {
         for await (const event of sseEvents(res.body)) {
           if (event.type === "activity") {
             setActivity(event.label);
+          } else if (event.type === "thought") {
+            setActivity("thinking");
+            setMessages((m) => {
+              const last = m[m.length - 1];
+              if (last?.role === "thought") {
+                return [
+                  ...m.slice(0, -1),
+                  { role: "thought", text: last.text + event.text },
+                ];
+              }
+              return [...m, { role: "thought", text: event.text }];
+            });
           } else if (event.type === "canvas") {
             touchDashboard(event.dashboard_id);
           } else if (event.type === "text") {
@@ -156,6 +168,10 @@ export function Chat() {
         {messages.map((message, i) =>
           message.role === "user" ? (
             <p key={i} className="chat-msg is-user">
+              {message.text}
+            </p>
+          ) : message.role === "thought" ? (
+            <p key={i} className="chat-msg is-thought">
               {message.text}
             </p>
           ) : (

@@ -43,7 +43,7 @@ export default async function GlobalRollout({
   return (
     <Shell
       title="Rollout"
-      lede="The Weekly Top 10 across 94 countries. Which titles travel, and which stay home."
+      lede="Where each title landed in the Weekly Top 10, country by country."
       {...ROOMS.rollout}
     >
       <RolloutAtlas

@@ -41,7 +41,7 @@ function useAtlas(kind: ChartType) {
   const [failed, setFailed] = useState<string>();
 
   useEffect(() => {
-    if (kind !== "map") return;
+    if (kind !== "map" && kind !== "lines") return;
     let dropped = false;
 
     loadWorldAtlas()
@@ -77,7 +77,7 @@ function Chart({ data }: { data: PanelData }) {
     if (!chart) return;
     // Drawing a map before the geometry arrives would register an empty
     // one, and ECharts caches that by name for every later panel.
-    if (kind === "map" && !atlas) return;
+    if ((kind === "map" || kind === "lines") && !atlas) return;
 
     chart.setOption(
       chartOption({ columns: data.columns, rows: data.rows }, data.panel.spec, atlas),
@@ -159,6 +159,12 @@ function TileBody({ kind, data }: { kind: ChartType; data: PanelData }) {
     case "graph":
     case "tree":
     case "themeRiver":
+    case "chord":
+    case "parallel":
+    case "pictorialBar":
+    case "effectScatter":
+    case "candlestick":
+    case "lines":
       return <Chart data={data} />;
     default: {
       // Unreachable while every member of ChartType has a case above, which
@@ -252,19 +258,22 @@ export function PanelCard({
   const { data, error } = state;
 
   useEffect(() => {
-    let dropped = false;
+    const ac = new AbortController();
 
-    fetch(`/api/dashboards/${panel.dashboard_id}/panels/${panel.id}`)
+    fetch(`/api/dashboards/${panel.dashboard_id}/panels/${panel.id}`, {
+      signal: ac.signal,
+    })
       .then(async (res) => {
         if (!res.ok) throw new Error(await res.text());
         return res.json() as Promise<PanelData>;
       })
-      .then((body) => !dropped && setState({ data: body }))
-      .catch((e: unknown) => !dropped && setState({ error: String(e) }));
+      .then((body) => setState({ data: body }))
+      .catch((e: unknown) => {
+        if (ac.signal.aborted) return;
+        setState({ error: String(e) });
+      });
 
-    return () => {
-      dropped = true;
-    };
+    return () => ac.abort();
   }, [panel.dashboard_id, panel.id, reloadKey]);
 
   const kind = panel.spec.type;

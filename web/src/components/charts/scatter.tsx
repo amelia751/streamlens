@@ -65,7 +65,7 @@ function logTicks(min: number, max: number) {
 
 export function MismatchScatter({
   points,
-  height = 360,
+  height = 260,
   onSelectTitle,
 }: {
   points: ScatterPoint[];
@@ -215,9 +215,7 @@ export function MismatchScatter({
         )}
       </ChartFrame>
       <p className="chart-axis-note">
-        Horizontal: promo channels, spread slightly so equal counts stay
-        readable · Vertical: hours viewed (log) · Area: weeks charted · Select a
-        title to open its dossier
+        Right is more channels. Up is hours viewed. Size is weeks on the chart.
       </p>
       <div className="legend">
         <span>

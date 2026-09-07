@@ -16,22 +16,19 @@ const ROOMS: {
   {
     href: "/rooms/greenlight",
     name: "Greenlight",
-    blurb:
-      "Promotional push against Top 10 outcome, title by title. Where the marketing spend and the result disagree.",
+    blurb: "Every title that got YouTube promo, set against its Weekly Top 10 result.",
     tone: "yellow",
   },
   {
     href: "/rooms/rollout",
     name: "Rollout",
-    blurb:
-      "The Weekly Top 10 across 94 countries and five years. Which titles travel, and which stay home.",
+    blurb: "Where each title landed in the Weekly Top 10, country by country.",
     tone: "blue",
   },
   {
     href: "/rooms/promo",
     name: "Promo",
-    blurb:
-      "44 Netflix YouTube channels as one publishing operation. Cadence, format mix, and market coverage.",
+    blurb: "What the 44 Netflix YouTube channels publish, where, and in what format.",
     tone: "green",
   },
   {

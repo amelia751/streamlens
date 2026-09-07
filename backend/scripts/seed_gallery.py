@@ -188,19 +188,144 @@ PANELS = [
     (
         "How the mix shifts",
         """
-        SELECT week, category, count() AS titles
-        FROM landing.netflix_top10_countries
-        WHERE week >= '2024-01-01'
-        GROUP BY week, category
-        ORDER BY week, category
+        SELECT
+            toStartOfMonth(datetime) AS month,
+            splitByString(', ', genres)[1] AS genre,
+            count() AS plays
+        FROM landing.vod_clickstream
+        WHERE genres != 'NOT AVAILABLE' AND datetime >= '2017-01-01'
+        GROUP BY month, genre
+        HAVING genre IN ('Drama', 'Comedy', 'Action', 'Documentary', 'Animation')
+        ORDER BY month, genre
         """,
         {
             "type": "themeRiver",
-            "x": "week",
-            "y": ["titles"],
-            "series": "category",
+            "x": "month",
+            "y": ["plays"],
+            "series": "genre",
             "format": "compact",
         },
+        12, 2,
+    ),
+    (
+        "What people watch next, circular",
+        """
+        SELECT src, dst, count() AS moves FROM (
+            SELECT
+                splitByString(', ', genres)[1] AS src,
+                leadInFrame(splitByString(', ', genres)[1])
+                    OVER (PARTITION BY user_id ORDER BY datetime
+                          ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING) AS dst
+            FROM landing.vod_clickstream
+            WHERE genres != 'NOT AVAILABLE'
+        )
+        WHERE dst != '' AND src != dst
+        GROUP BY src, dst
+        ORDER BY moves DESC
+        LIMIT 16
+        """,
+        {"type": "chord", "source": "src", "target": "dst", "value": "moves", "format": "compact"},
+        6, 2,
+    ),
+    (
+        "Channel profiles",
+        """
+        SELECT title, subscriber_count, view_count, video_count
+        FROM (
+            SELECT
+                c.title,
+                s.subscriber_count,
+                s.view_count,
+                s.video_count,
+                row_number() OVER (PARTITION BY s.channel_id ORDER BY s.snapshot_ts DESC) AS rn
+            FROM youtube.channel_stats s
+            INNER JOIN youtube.channel c ON c.channel_id = s.channel_id
+        )
+        WHERE rn = 1
+        ORDER BY view_count DESC
+        LIMIT 5
+        """,
+        {
+            "type": "parallel",
+            "x": "title",
+            "y": ["subscriber_count", "view_count", "video_count"],
+            "format": "compact",
+        },
+        6, 2,
+    ),
+    (
+        "Titles by market, as marks",
+        """
+        SELECT country_name AS country, uniqExact(show_title) AS titles
+        FROM landing.netflix_top10_countries
+        WHERE week >= '2025-01-01' AND country_iso2 IN ('US','GB','BR','JP','IN','FR','DE','KR')
+        GROUP BY country
+        ORDER BY titles DESC
+        """,
+        {"type": "pictorialBar", "x": "country", "y": ["titles"], "format": "compact"},
+        6, 2,
+    ),
+    (
+        "Views against likes",
+        """
+        SELECT view_count, like_count
+        FROM youtube.video_stats
+        WHERE view_count > 0 AND like_count > 0
+        ORDER BY snapshot_ts DESC
+        LIMIT 80
+        """,
+        {"type": "effectScatter", "x": "view_count", "y": ["like_count"], "format": "compact"},
+        6, 2,
+    ),
+    (
+        "Plays, week by week",
+        """
+        SELECT
+            week,
+            argMin(plays, dow) AS open,
+            argMax(plays, dow) AS close,
+            min(plays) AS low,
+            max(plays) AS high
+        FROM (
+            SELECT
+                toStartOfWeek(datetime) AS week,
+                toDayOfWeek(datetime) AS dow,
+                count() AS plays
+            FROM landing.vod_clickstream
+            WHERE datetime >= '2018-01-01' AND datetime < '2019-01-01'
+            GROUP BY week, dow
+        )
+        GROUP BY week
+        ORDER BY week
+        """,
+        {
+            "type": "candlestick",
+            "x": "week",
+            "y": ["open", "close", "low", "high"],
+            "format": "compact",
+        },
+        12, 2,
+    ),
+    (
+        "Shared Top 10 with the US",
+        """
+        WITH us AS (
+            SELECT DISTINCT show_title
+            FROM landing.netflix_top10_countries
+            WHERE country_iso2 = 'US' AND week >= '2025-01-01'
+        )
+        SELECT
+            'United States' AS src,
+            c.country_name AS dst,
+            uniqExact(c.show_title) AS titles
+        FROM landing.netflix_top10_countries c
+        INNER JOIN us ON us.show_title = c.show_title
+        WHERE c.country_iso2 != 'US' AND c.week >= '2025-01-01'
+        GROUP BY c.country_name
+        ORDER BY titles DESC
+        LIMIT 18
+        """,
+        {"type": "lines", "source": "src", "target": "dst", "value": "titles", "format": "compact"},
         12, 2,
     ),
 ]

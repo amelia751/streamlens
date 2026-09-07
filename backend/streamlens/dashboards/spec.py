@@ -145,7 +145,12 @@ def validate_spec(spec: PanelSpec, columns: list[str]) -> list[str]:
                 )
             continue
 
-        if not channel.many and len(chosen) > 1:
+        if channel.exactly is not None and len(chosen) != channel.exactly:
+            problems.append(
+                f"a {kind.name} panel takes exactly {channel.exactly} "
+                f"'{channel.name}' columns ({channel.describe}), got {len(chosen)}"
+            )
+        elif not channel.many and len(chosen) > 1:
             problems.append(
                 f"a {kind.name} panel takes exactly one '{channel.name}' column, "
                 f"got {len(chosen)}"

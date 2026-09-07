@@ -28,7 +28,7 @@ export default async function GreenlightRoom() {
   return (
     <Shell
       title="Greenlight"
-      lede="Promotional push against Top 10 outcome, title by title."
+      lede="Every title that got YouTube promo, set against its Weekly Top 10 result."
       {...ROOMS.greenlight}
     >
       <GreenlightBoard board={board} categories={categories} />

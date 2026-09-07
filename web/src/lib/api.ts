@@ -90,6 +90,12 @@ export type ChartType =
   | "graph"
   | "tree"
   | "themeRiver"
+  | "chord"
+  | "parallel"
+  | "pictorialBar"
+  | "effectScatter"
+  | "candlestick"
+  | "lines"
   | "table"
   | "stat";
 

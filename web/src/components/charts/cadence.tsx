@@ -29,7 +29,7 @@ function monthLabel(raw: string) {
 
 export function StackedBars({
   data,
-  height = 240,
+  height = 200,
 }: {
   data: { label: string; a: number; b: number }[];
   height?: number;

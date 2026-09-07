@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from streamlens.dashboards.glance import glance
 from streamlens.dashboards.spec import PanelSpec, parse_spec, validate_spec
 from streamlens.services.clickhouse.catalog import _cell
 from streamlens.services.clickhouse.client import reader_client, shared_client
@@ -157,8 +158,9 @@ def check_panel(query: str, spec_raw: dict) -> dict[str, Any]:
         "problems": problems,
         "columns": result["columns"],
         "types": result["types"],
-        "sample_rows": result["rows"][:5],
+        "sample_rows": result["rows"][:12],
         "row_count": len(result["rows"]),
+        "glance": glance(result["columns"], result["types"], result["rows"]),
         "spec": spec.to_dict(),
     }
 
@@ -268,17 +270,48 @@ def update_dashboard(
 
 
 def delete_dashboard(dashboard_id: str) -> int:
-    """Tombstone a dashboard and every panel on it."""
-    dashboard = get_dashboard(dashboard_id)
+    """Tombstone a dashboard and every panel on it.
+
+    The copy stays on the server. Pulling every panel's query through Python
+    just to write `is_deleted = 1` is what made the UI hang — especially
+    while the canvas was still replaying those same queries.
+    """
     client = shared_client()
-    client.insert(
-        "streamlens.dashboard",
-        [[dashboard_id, dashboard.title, dashboard.description, _now(), 1]],
-        column_names=["id", "title", "description", "updated_at", "is_deleted"],
+    found = client.query(
+        "SELECT count() FROM streamlens.dashboard FINAL "
+        "WHERE id = {id:String} AND is_deleted = 0",
+        parameters={"id": dashboard_id},
+    ).result_rows
+    if not found or not found[0][0]:
+        raise DashboardError(f"no dashboard with id {dashboard_id!r}")
+
+    leftover = client.query(
+        "SELECT count() FROM streamlens.panel FINAL "
+        "WHERE dashboard_id = {id:String} AND is_deleted = 0",
+        parameters={"id": dashboard_id},
+    ).result_rows
+    n = int(leftover[0][0]) if leftover else 0
+
+    client.command(
+        "INSERT INTO streamlens.dashboard "
+        "(id, title, description, updated_at, is_deleted) "
+        "SELECT id, title, description, now64(3, 'UTC'), 1 "
+        "FROM streamlens.dashboard FINAL "
+        "WHERE id = {id:String} AND is_deleted = 0",
+        parameters={"id": dashboard_id},
     )
-    for panel in dashboard.panels:
-        _write_panel(panel, deleted=True)
-    return len(dashboard.panels)
+    if n:
+        client.command(
+            "INSERT INTO streamlens.panel "
+            "(dashboard_id, id, title, query, spec, position, width, height, "
+            "updated_at, is_deleted) "
+            "SELECT dashboard_id, id, title, query, spec, position, width, "
+            "height, now64(3, 'UTC'), 1 "
+            "FROM streamlens.panel FINAL "
+            "WHERE dashboard_id = {id:String} AND is_deleted = 0",
+            parameters={"id": dashboard_id},
+        )
+    return n
 
 
 # ---------------------------------------------------------------- panels

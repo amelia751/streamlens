@@ -12,12 +12,12 @@ import { AnimatePresence, motion } from "motion/react";
 import { TONES, type Tone } from "@/lib/theme";
 
 const BASE: React.CSSProperties = {
-  height: "2rem",
+  height: "1.75rem",
   border: "1px solid var(--line)",
-  borderRadius: 8,
+  borderRadius: 6,
   background: "var(--paper)",
   color: "var(--ink)",
-  fontSize: "0.8125rem",
+  fontSize: "0.75rem",
   fontWeight: 500,
   fontFamily: "inherit",
 };
@@ -175,7 +175,7 @@ export function Segmented({
               key={o.value}
               type="button"
               onClick={() => onChange(o.value)}
-              className="relative px-2.5 py-1.5"
+              className="relative px-2 py-1"
               style={{
                 fontSize: "0.75rem",
                 fontWeight: 600,
@@ -237,7 +237,7 @@ export function RangeSlider({
         max={max}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="h-8 w-32 cursor-pointer"
+        className="h-7 w-28 cursor-pointer"
         style={{ accentColor: "var(--yellow)" }}
       />
     </label>

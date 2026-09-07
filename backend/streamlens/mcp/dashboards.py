@@ -24,6 +24,11 @@ A dashboard is a titled grid of panels. A panel is one SELECT plus a small
 spec saying how to draw its columns — you choose the columns and the chart
 type, not the pixels.
 
+Call `warehouse_overview` once for the catalog instead of listing every
+database. `preview_query` and `add_panel` return a `glance` (first/last,
+min/max) so you can caption from the result. `read_panels` replays saved
+queries — `get_dashboard` is specs only.
+
 Adding or changing a panel runs its query first and checks the spec against
 the columns that came back. When something does not line up the panel is not
 saved and you get the real column list back, so read `problems` and retry

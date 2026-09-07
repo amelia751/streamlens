@@ -12,7 +12,7 @@ const ID = /^[A-Za-z0-9_-]+$/;
  * that was validated when the panel was saved.
  */
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: Promise<{ id: string; panelId: string }> },
 ) {
   const { id, panelId } = await ctx.params;
@@ -23,13 +23,16 @@ export async function GET(
   try {
     const res = await fetch(
       `${BACKEND_URL}/api/dashboards/${id}/panels/${panelId}/data`,
-      { cache: "no-store" },
+      { cache: "no-store", signal: req.signal },
     );
     return new NextResponse(await res.text(), {
       status: res.status,
       headers: { "content-type": "application/json" },
     });
   } catch {
+    if (req.signal.aborted) {
+      return new NextResponse(null, { status: 499 });
+    }
     return NextResponse.json({ error: "backend unreachable" }, { status: 502 });
   }
 }

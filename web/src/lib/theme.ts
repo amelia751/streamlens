@@ -21,8 +21,8 @@ export const ROOMS: Record<
   string,
   { tone: Tone; kicker: string }
 > = {
-  greenlight: { tone: "yellow", kicker: "Promo vs outcome" },
+  greenlight: { tone: "yellow", kicker: "Promo vs Top 10" },
   rollout: { tone: "blue", kicker: "Country Top 10" },
-  promo: { tone: "green", kicker: "YouTube operation" },
+  promo: { tone: "green", kicker: "YouTube" },
   studio: { tone: "purple", kicker: "Warehouse + analyst" },
 };

@@ -30,6 +30,7 @@ class Channel:
     describe: str
     required: bool = True
     many: bool = False
+    exactly: int | None = None
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,12 @@ _VALUE_OPTIONAL = Channel(
     "value",
     "an optional measure; without it every leaf counts as one",
     required=False,
+)
+_OHLC = Channel(
+    "y",
+    "four columns in order: open, close, low, high",
+    many=True,
+    exactly=4,
 )
 
 
@@ -172,6 +179,40 @@ CHARTS: tuple[Chart, ...] = (
         "how a mix changes over time, when the shifting share is the point.",
         (_X, _MEASURE, _THEME),
     ),
+    Chart(
+        "chord",
+        "how a set of things trade with each other, drawn as ribbons "
+        "around a circle.",
+        (_SOURCE, _TARGET, _VALUE),
+    ),
+    Chart(
+        "parallel",
+        "several measures of the same things, as axes in a row, so you "
+        "can read each one's profile.",
+        (_ENTITY, _MEASURES),
+    ),
+    Chart(
+        "pictorialBar",
+        "comparing categories when a repeated mark reads more clearly "
+        "than a filled bar.",
+        (_X, _MEASURE),
+    ),
+    Chart(
+        "effectScatter",
+        "the relationship between two measures, when a few points should "
+        "pulse so the eye lands on them.",
+        (_X, _MEASURES, _SERIES),
+    ),
+    Chart(
+        "candlestick",
+        "the open, close, high and low of a measure over time.",
+        (_X, _OHLC),
+    ),
+    Chart(
+        "lines",
+        "flow between countries, drawn as arcs on the world map.",
+        (_SOURCE, _TARGET, _VALUE),
+    ),
     Chart("stat", "a single headline number.", (_MEASURE,)),
     Chart("table", "when the rows are the point — names, ids, long tails.", ()),
 )
@@ -199,6 +240,8 @@ def _takes(spec: Chart) -> str:
     for channel in spec.channels:
         if not channel.required:
             bits.append(f"optionally {channel.name}")
+        elif channel.exactly:
+            bits.append(f"{channel.name} (exactly {channel.exactly})")
         elif channel.many:
             bits.append(f"{channel.name} (one or more)")
         else:

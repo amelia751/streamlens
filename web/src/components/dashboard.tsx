@@ -24,19 +24,20 @@ export function DashboardView({ dashboardId }: { dashboardId: string }) {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
-    let dropped = false;
+    const ac = new AbortController();
 
-    fetch(`/api/dashboards/${dashboardId}`)
+    fetch(`/api/dashboards/${dashboardId}`, { signal: ac.signal })
       .then(async (res) => {
         if (!res.ok) throw new Error(await res.text());
         return res.json() as Promise<Dashboard>;
       })
-      .then((body) => !dropped && setState({ dashboard: body }))
-      .catch((e: unknown) => !dropped && setState({ error: String(e) }));
+      .then((body) => setState({ dashboard: body }))
+      .catch((e: unknown) => {
+        if (ac.signal.aborted) return;
+        setState({ error: String(e) });
+      });
 
-    return () => {
-      dropped = true;
-    };
+    return () => ac.abort();
   }, [dashboardId, revision]);
 
   // Escape is what people reach for to get out of an expanded panel.

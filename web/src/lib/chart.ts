@@ -506,6 +506,16 @@ export function chartOption(
       return treeOption(frame, spec);
     case "themeRiver":
       return themeRiverOption(frame, spec);
+    case "chord":
+      return chordOption(frame, spec);
+    case "parallel":
+      return parallelOption(frame, spec);
+    case "pictorialBar":
+      return pictorialBarOption(frame, spec);
+    case "candlestick":
+      return candlestickOption(frame, spec);
+    case "lines":
+      return linesOption(frame, spec, atlas);
     default:
       return cartesianOption(frame, spec);
   }
@@ -523,6 +533,7 @@ function cartesianOption(frame: Frame, spec: PanelSpec): EChartsOption {
   const numeric =
     !temporal &&
     spec.type !== "bar" &&
+    spec.type !== "pictorialBar" &&
     xs.length > 0 &&
     xs.every((x) => x !== null && x !== "" && Number.isFinite(Number(x)));
   const many = names.length > 1;
@@ -586,16 +597,21 @@ function cartesianOption(frame: Frame, spec: PanelSpec): EChartsOption {
       };
     }
 
-    if (spec.type === "scatter") {
+    if (spec.type === "scatter" || spec.type === "effectScatter") {
       return {
         ...common,
-        type: "scatter" as const,
-        symbolSize: 10,
+        type: spec.type === "effectScatter" ? ("effectScatter" as const) : ("scatter" as const),
+        symbolSize: spec.type === "effectScatter" ? 12 : 10,
         itemStyle: {
           color: rgba(tone, 0.72),
           borderColor: stroke,
           borderWidth: 1,
         },
+        rippleEffect:
+          spec.type === "effectScatter"
+            ? { scale: 3.2, brushType: "stroke" as const, period: 3.4, color: stroke }
+            : undefined,
+        showEffectOn: spec.type === "effectScatter" ? ("render" as const) : undefined,
         emphasis: { ...common.emphasis, scale: 1.45 },
         blur: { itemStyle: { opacity: 0.16 } },
       };
@@ -667,7 +683,7 @@ function cartesianOption(frame: Frame, spec: PanelSpec): EChartsOption {
     xAxis = {
       type: "category",
       data: xs.map(String),
-      boundaryGap: spec.type === "bar",
+      boundaryGap: spec.type === "bar" || spec.type === "pictorialBar" || spec.type === "candlestick",
       ...bareAxis,
       axisLabel: {
         ...axisLabel,
@@ -683,10 +699,21 @@ function cartesianOption(frame: Frame, spec: PanelSpec): EChartsOption {
   return {
     baseOption: {
       ...BASE,
-      grid: { left: 4, right: 10, bottom: 0, containLabel: true },
+      grid: {
+        left: 4,
+        right: 10,
+        bottom: temporal && xs.length > 60 ? 8 : 0,
+        containLabel: true,
+      },
+      // A long time series can be pinched; the slider stays off the tile
+      // so the chart does not grow a second axis of chrome.
+      dataZoom:
+        temporal && xs.length > 60
+          ? [{ type: "inside" as const, filterMode: "none" as const, zoomOnMouseWheel: false }]
+          : undefined,
       tooltip: {
         ...tooltipCard(spec.format, 1),
-        trigger: spec.type === "scatter" ? "item" : "axis",
+        trigger: spec.type === "scatter" || spec.type === "effectScatter" ? "item" : "axis",
       },
       // Several series without a key is just coloured noise, so the legend
       // stays even on the smallest panel.
@@ -1727,8 +1754,19 @@ function graphOption(frame: Frame, spec: PanelSpec): EChartsOption {
     return {
       name,
       value: weight,
-      symbolSize: 10 + (22 * weight) / (peak * 2),
-      itemStyle: { color: PALETTE[i % PALETTE.length], borderWidth: 0 },
+      symbolSize: 16 + (28 * weight) / (peak * Math.max(names.length, 1)),
+      itemStyle: {
+        color: PALETTE[i % PALETTE.length],
+        borderColor: PAPER,
+        borderWidth: 2,
+      },
+      label: {
+        show: true,
+        color: INK,
+        fontSize: 10,
+        fontWeight: 600,
+        formatter: name.length > 14 ? `${name.slice(0, 13)}…` : name,
+      },
     };
   });
 
@@ -1760,35 +1798,33 @@ function graphOption(frame: Frame, spec: PanelSpec): EChartsOption {
         {
           id: "net",
           type: "graph" as const,
-          layout: "force" as const,
+          // Force layout walks off a tile. Circular stays inside the panel
+          // and still reads as a network once the ribbons have a curve.
+          layout: "circular" as const,
+          circular: { rotateLabel: false },
           data: nodes,
-          links: links.map((link) => ({
-            ...link,
-            lineStyle: {
-              color: rgba(INK, 0.18 + 0.28 * (link.value / peak)),
-              width: 1 + (3 * link.value) / peak,
-              curveness: 0.18,
-            },
-          })),
+          links: links.map((link) => {
+            const src = names.indexOf(link.source);
+            const tone = PALETTE[(src < 0 ? 0 : src) % PALETTE.length];
+            return {
+              ...link,
+              lineStyle: {
+                color: rgba(tone, 0.28 + 0.4 * (link.value / peak)),
+                width: 1.2 + (3.5 * link.value) / peak,
+                curveness: 0.32,
+              },
+            };
+          }),
           roam: false,
           draggable: false,
-          force: {
-            repulsion: 220,
-            gravity: 0.08,
-            edgeLength: [48, 120] as [number, number],
-            friction: 0.4,
-          },
-          label: {
-            show: true,
-            color: INK,
-            fontSize: 10,
-            fontWeight: 500,
-            formatter: (p: { name: string }) =>
-              p.name.length > 16 ? `${p.name.slice(0, 15)}…` : p.name,
-          },
+          top: 18,
+          bottom: 18,
+          left: 56,
+          right: 56,
+          label: { show: true, fontSize: 10, fontWeight: 600, color: INK },
           itemStyle: { borderWidth: 0 },
-          emphasis: { focus: "adjacency" as const, lineStyle: { width: 4 } },
-          blur: { itemStyle: { opacity: 0.2 }, lineStyle: { opacity: 0.06 } },
+          emphasis: { focus: "adjacency" as const, lineStyle: { width: 5, opacity: 0.85 } },
+          blur: { itemStyle: { opacity: 0.18 }, lineStyle: { opacity: 0.05 } },
         },
       ],
     },
@@ -1934,6 +1970,413 @@ function themeRiverOption(frame: Frame, spec: PanelSpec): EChartsOption {
         option: { singleAxis: { axisLabel: { fontSize: 10 } } },
       },
       { option: { singleAxis: { axisLabel: { fontSize: 11 } } } },
+    ],
+  };
+}
+
+function chordOption(frame: Frame, spec: PanelSpec): EChartsOption {
+  const si = indexOf(frame, spec.source);
+  const ti = indexOf(frame, spec.target);
+  const vi = indexOf(frame, spec.value);
+  const scale = measureScale(numbersAt(frame, spec.value), spec.format);
+
+  const links = frame.rows
+    .map((row) => ({
+      source: String(row[si] ?? "—"),
+      target: String(row[ti] ?? "—"),
+      value: toNumber(row[vi]) * scale,
+    }))
+    .filter((link) => link.source && link.target && link.value > 0);
+
+  const names = unique(links.flatMap((link) => [link.source, link.target]));
+  const nodes = names.map((name, i) => ({
+    name,
+    itemStyle: { color: PALETTE[i % PALETTE.length] },
+  }));
+
+  return {
+    baseOption: {
+      ...BASE,
+      tooltip: {
+        ...CARD,
+        trigger: "item" as const,
+        formatter: (params: unknown) => {
+          const p = params as {
+            dataType?: string;
+            name: string;
+            value: number;
+            data: { source?: string; target?: string; value?: number };
+            color: string;
+          };
+          if (p.data?.source && p.data?.target) {
+            return tip(`${p.data.source} → ${p.data.target}`, [
+              { label: "Flow", value: formatValue(toNumber(p.data.value), spec.format) },
+            ]);
+          }
+          return tip(p.name, [
+            { label: "Total", value: formatValue(p.value, spec.format), color: p.color },
+          ]);
+        },
+      },
+      series: [
+        {
+          id: "ribbons",
+          type: "chord" as const,
+          data: nodes,
+          links,
+          center: ["50%", "50%"],
+          radius: ["48%", "70%"],
+          padAngle: 2,
+          startAngle: 90,
+          itemStyle: { borderColor: PAPER, borderWidth: 2, borderRadius: [0, 0, 5, 5] },
+          lineStyle: { color: "source" as const, opacity: 0.28 },
+          label: {
+            color: INK,
+            fontSize: 10,
+            fontWeight: 500,
+            formatter: (p: { name: string }) =>
+              p.name.length > 14 ? `${p.name.slice(0, 13)}…` : p.name,
+          },
+          emphasis: { focus: "adjacency" as const, lineStyle: { opacity: 0.55 } },
+          blur: { itemStyle: { opacity: 0.25 }, lineStyle: { opacity: 0.06 } },
+        },
+      ],
+    },
+    media: [
+      { query: { maxWidth: NARROW }, option: { series: [{ label: { show: false }, radius: ["40%", "64%"] }] } },
+      { option: { series: [{ label: { show: true }, radius: ["48%", "70%"] }] } },
+    ],
+  };
+}
+
+function parallelOption(frame: Frame, spec: PanelSpec): EChartsOption {
+  const names = columnAt(frame, spec.x).map(String);
+  const measures = spec.y;
+  const columns = measures.map((column) => {
+    const raw = numbersAt(frame, column);
+    const scale = measureScale(raw, spec.format);
+    return raw.map((v) => v * scale);
+  });
+
+  const data = names.map((name, row) => ({
+    name,
+    value: measures.map((_, i) => columns[i][row] ?? 0),
+    lineStyle: {
+      color: PALETTE[row % PALETTE.length],
+      width: 1.8,
+      opacity: names.length > 8 ? 0.45 : 0.7,
+    },
+  }));
+
+  return {
+    baseOption: {
+      ...BASE,
+      tooltip: {
+        ...CARD,
+        trigger: "item" as const,
+        formatter: (params: unknown) => {
+          const p = params as { name: string; value: number[]; color: string };
+          return tip(
+            p.name,
+            measures.map((measure, i) => ({
+              label: measure,
+              value: formatValue(p.value[i] ?? 0, spec.format),
+              color: p.color,
+            })),
+          );
+        },
+      },
+      legend: legend(names.length > 1 && names.length <= 8),
+      parallel: {
+        left: 56,
+        right: 24,
+        top: names.length > 1 && names.length <= 8 ? 32 : 16,
+        bottom: 16,
+        parallelAxisDefault: {
+          type: "value" as const,
+          nameTextStyle: { color: MUTED, fontSize: 10, fontWeight: 500 },
+          axisLine: { lineStyle: { color: LINE } },
+          axisTick: { show: false },
+          splitLine: { show: false },
+          axisLabel: {
+            color: MUTED,
+            fontSize: 10,
+            formatter: (v: number) => formatValue(v, spec.format),
+          },
+        },
+      },
+      parallelAxis: measures.map((name, i) => ({
+        dim: i,
+        name: name.length > 14 ? `${name.slice(0, 13)}…` : name,
+      })),
+      series: [
+        {
+          id: "profiles",
+          type: "parallel" as const,
+          data,
+          smooth: true,
+          emphasis: { lineStyle: { width: 2.6, opacity: 1 } },
+          blur: { lineStyle: { opacity: 0.08 } },
+        },
+      ],
+    },
+    media: [
+      { query: { maxWidth: NARROW }, option: { parallel: { left: 36, right: 12 } } },
+      { option: { parallel: { left: 56, right: 24 } } },
+    ],
+  };
+}
+
+function pictorialBarOption(frame: Frame, spec: PanelSpec): EChartsOption {
+  const xs = columnAt(frame, spec.x).map(String);
+  const raw = numbersAt(frame, spec.y[0] ?? null);
+  const scale = measureScale(raw, spec.format);
+  const values = raw.map((v) => v * scale);
+  const tone = TONES.blue;
+  const stroke = darken(tone);
+
+  return {
+    baseOption: {
+      ...BASE,
+      grid: { left: 4, right: 16, top: 10, bottom: 0, containLabel: true },
+      tooltip: {
+        ...tooltipCard(spec.format, 1),
+        trigger: "axis" as const,
+      },
+      xAxis: {
+        type: "category" as const,
+        data: xs,
+        boundaryGap: true,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { show: false },
+        axisLabel: {
+          color: MUTED,
+          fontSize: 11,
+          fontWeight: 500,
+          interval: 0,
+          formatter: (v: string) => (v.length > 14 ? `${v.slice(0, 13)}…` : v),
+        },
+      },
+      yAxis: {
+        type: "value" as const,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { lineStyle: { color: LINE, type: [3, 6] as [number, number] } },
+        axisLabel: {
+          color: MUTED,
+          fontSize: 11,
+          formatter: (v: number) => formatValue(v, spec.format),
+        },
+      },
+      series: [
+        {
+          id: "marks",
+          type: "pictorialBar" as const,
+          data: values,
+          symbol: "roundRect",
+          symbolRepeat: true,
+          symbolClip: true,
+          symbolMargin: 3,
+          symbolSize: [18, 8],
+          itemStyle: { color: fade(tone, 0.95, 0.55), borderColor: stroke, borderWidth: 0.6 },
+          emphasis: { itemStyle: { color: tone } },
+          animationDelay: (idx: number) => idx * 70,
+        },
+      ],
+    },
+    media: [
+      {
+        query: { maxWidth: NARROW },
+        option: { series: [{ symbolSize: [12, 6] }], xAxis: { axisLabel: { fontSize: 10 } } },
+      },
+      { option: { series: [{ symbolSize: [18, 8] }], xAxis: { axisLabel: { fontSize: 11 } } } },
+    ],
+  };
+}
+
+function candlestickOption(frame: Frame, spec: PanelSpec): EChartsOption {
+  const xs = columnAt(frame, spec.x).map(String);
+  const cols = spec.y.slice(0, 4).map((column) => numbersAt(frame, column));
+  const scale = measureScale(cols.flat(), spec.format);
+  const data = xs.map((_, i) =>
+    cols.map((column) => (column[i] ?? 0) * scale),
+  );
+
+  const axisLabel = { color: MUTED, fontSize: 11, fontWeight: 500, hideOverlap: true };
+
+  return {
+    baseOption: {
+      ...BASE,
+      grid: { left: 4, right: 10, top: 10, bottom: 0, containLabel: true },
+      tooltip: {
+        ...CARD,
+        trigger: "axis" as const,
+        formatter: (params: unknown) => {
+          const rows = Array.isArray(params) ? params : [params];
+          const p = rows[0] as { name?: string; axisValueLabel?: string; value: number[] };
+          const values = Array.isArray(p.value) ? p.value : [];
+          // ECharts prepends the category index on a category axis.
+          const ohlc = values.length > 4 ? values.slice(1, 5) : values;
+          const [open, close, low, high] = ohlc;
+          const show = (v: number) => formatValue(v, spec.format);
+          return tip(String(p.axisValueLabel ?? p.name ?? ""), [
+            { label: "High", value: show(high) },
+            { label: "Open", value: show(open) },
+            { label: "Close", value: show(close) },
+            { label: "Low", value: show(low) },
+          ]);
+        },
+      },
+      xAxis: {
+        type: "category" as const,
+        data: xs,
+        boundaryGap: true,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { show: false },
+        axisLabel: { ...axisLabel, interval: 0 },
+      },
+      yAxis: {
+        type: "value" as const,
+        scale: true,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { lineStyle: { color: LINE, type: [3, 6] as [number, number] } },
+        axisLabel: { ...axisLabel, formatter: (v: number) => formatValue(v, spec.format) },
+      },
+      series: [
+        {
+          id: "range",
+          type: "candlestick" as const,
+          data,
+          barMaxWidth: 18,
+          itemStyle: {
+            color: fade(TONES.green, 0.95, 0.55),
+            color0: fade(TONES.purple, 0.95, 0.55),
+            borderColor: darken(TONES.green),
+            borderColor0: darken(TONES.purple),
+            borderWidth: 1.2,
+          },
+          emphasis: { itemStyle: { borderWidth: 2 } },
+        },
+      ],
+    },
+    media: [
+      { query: { maxWidth: NARROW }, option: { xAxis: { axisLabel: { fontSize: 10 } } } },
+      { option: { xAxis: { axisLabel: { fontSize: 11 } } } },
+    ],
+  };
+}
+
+function linesOption(frame: Frame, spec: PanelSpec, atlas?: WorldAtlas): EChartsOption {
+  const si = indexOf(frame, spec.source);
+  const ti = indexOf(frame, spec.target);
+  const vi = indexOf(frame, spec.value);
+  const scale = measureScale(numbersAt(frame, spec.value), spec.format);
+
+  const data: { coords: [number, number][]; value: number }[] = [];
+  let unplaced = 0;
+
+  for (const row of frame.rows) {
+    const from = atlas ? resolvePlace(atlas, row[si]) : undefined;
+    const to = atlas ? resolvePlace(atlas, row[ti]) : undefined;
+    const a = from ? atlas?.centers[from] : undefined;
+    const b = to ? atlas?.centers[to] : undefined;
+    if (!a || !b) {
+      unplaced += 1;
+      continue;
+    }
+    data.push({ coords: [a, b], value: toNumber(row[vi]) * scale });
+  }
+
+  const peak = data.reduce((m, d) => Math.max(m, d.value), 1);
+
+  return {
+    baseOption: {
+      ...BASE,
+      tooltip: {
+        ...CARD,
+        trigger: "item" as const,
+        formatter: (params: unknown) => {
+          const p = params as { data?: { value?: number } };
+          return tip("Flow", [
+            { label: "Value", value: formatValue(toNumber(p.data?.value), spec.format) },
+          ]);
+        },
+      },
+      geo: {
+        map: WORLD_MAP,
+        roam: false,
+        top: 4,
+        bottom: 8,
+        aspectScale: 1,
+        boundingCoords: [
+          [-180, 83],
+          [180, -56],
+        ] as [[number, number], [number, number]],
+        silent: true,
+        itemStyle: { areaColor: "#f4f4f5", borderColor: PAPER, borderWidth: 0.8 },
+        emphasis: { disabled: true },
+      },
+      graphic: unplaced
+        ? [
+            {
+              type: "text" as const,
+              right: 2,
+              top: 2,
+              silent: true,
+              style: {
+                text: `${unplaced} not on the map`,
+                fill: FAINT,
+                fontSize: 10,
+                fontFamily: "inherit",
+              },
+            },
+          ]
+        : [],
+      series: [
+        {
+          id: "arcs",
+          type: "lines" as const,
+          coordinateSystem: "geo" as const,
+          data,
+          polyline: false,
+          lineStyle: {
+            color: TONES.blue,
+            width: 1.2,
+            opacity: 0.45,
+            curveness: 0.22,
+          },
+          effect: {
+            show: true,
+            period: 4,
+            trailLength: 0.35,
+            symbol: "circle",
+            symbolSize: 3.5,
+            color: darken(TONES.blue),
+          },
+          emphasis: { lineStyle: { width: 2.2, opacity: 0.85 } },
+          blur: { lineStyle: { opacity: 0.08 } },
+        },
+        {
+          id: "ends",
+          type: "effectScatter" as const,
+          coordinateSystem: "geo" as const,
+          data: data.flatMap((d) => [
+            { value: [...d.coords[0], d.value] },
+            { value: [...d.coords[1], d.value] },
+          ]),
+          symbolSize: (v: number[]) => 4 + (8 * (v[2] ?? 0)) / peak,
+          itemStyle: { color: TONES.blue, borderColor: PAPER, borderWidth: 1 },
+          rippleEffect: { scale: 2.4, brushType: "stroke" as const, period: 3.6 },
+          label: { show: false },
+        },
+      ],
+    },
+    media: [
+      { query: { maxWidth: NARROW }, option: { geo: { top: 2, bottom: 6 } } },
+      { option: { geo: { top: 4, bottom: 8 } } },
     ],
   };
 }

@@ -97,23 +97,23 @@ function TableTab({ database, table }: { database: string; table: string }) {
 
   useEffect(() => {
     if (cached(id)) return;
-    let dropped = false;
+    const ac = new AbortController();
 
-    fetch(`/api/table/${database}/${table}?limit=200`)
+    fetch(`/api/table/${database}/${table}?limit=200`, { signal: ac.signal })
       .then(async (res) => {
         if (!res.ok) throw new Error(await res.text());
         return res.json() as Promise<TablePreview>;
       })
       .then((data) => {
-        if (dropped) return;
         cache(id, data);
         setPreview(data);
       })
-      .catch((e: unknown) => !dropped && setError(String(e)));
+      .catch((e: unknown) => {
+        if (ac.signal.aborted) return;
+        setError(String(e));
+      });
 
-    return () => {
-      dropped = true;
-    };
+    return () => ac.abort();
   }, [id, database, table, cached, cache]);
 
   if (error) return <p className="canvas-error">{error}</p>;

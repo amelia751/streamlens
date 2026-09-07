@@ -31,7 +31,7 @@ export default async function PromoMachinePage() {
   return (
     <Shell
       title="Promo"
-      lede="44 Netflix YouTube channels as one publishing operation."
+      lede="What the 44 Netflix YouTube channels publish, where, and in what format."
       {...ROOMS.promo}
     >
       <PromoMachine

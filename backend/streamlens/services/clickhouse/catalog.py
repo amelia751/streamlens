@@ -159,6 +159,67 @@ def read_table_preview(database: str, table: str, limit: int) -> dict:
     }
 
 
+# Dashboard definitions live in the warehouse but are not a dataset. The
+# brief names the tables so the agent does not waste a list_tables on them.
+_STORE_DATABASES = frozenset({"streamlens"})
+
+
+def read_schema_brief() -> dict:
+    """One compact look at every data table: columns, types, row counts.
+
+    Built for the curator. `list_databases` + `list_tables` dumps CREATE
+    TABLE statements and walks empty/system databases; this skips those and
+    returns only what the model needs to write a SELECT.
+    """
+    client = shared_client()
+    hidden = ", ".join(f"'{db}'" for db in HIDDEN_DATABASES)
+
+    today = client.command("SELECT toString(today())")
+    tables = client.query(
+        f"""
+        SELECT database, name, engine, toUInt64(ifNull(total_rows, 0))
+        FROM system.tables
+        WHERE database NOT IN ({hidden})
+          AND name NOT LIKE '%{ERROR_TABLE_SUFFIX}'
+        ORDER BY database, name
+        """
+    ).result_rows
+    columns = client.query(
+        f"""
+        SELECT database, table, name, type
+        FROM system.columns
+        WHERE database NOT IN ({hidden})
+          AND table NOT LIKE '%{ERROR_TABLE_SUFFIX}'
+        ORDER BY database, table, position
+        """
+    ).result_rows
+
+    cols_by_table: dict[tuple[str, str], list[str]] = {}
+    for database, table, name, type_ in columns:
+        cols_by_table.setdefault((database, table), []).append(f"{name}:{type_}")
+
+    databases: dict[str, list[dict]] = {}
+    for database, name, engine, rows in tables:
+        entry: dict = {
+            "name": name,
+            "rows": int(rows),
+            "kind": _classify(name, engine),
+        }
+        if database in _STORE_DATABASES:
+            entry["note"] = "dashboard definitions, not a dataset"
+        else:
+            entry["columns"] = cols_by_table.get((database, name), [])
+        databases.setdefault(database, []).append(entry)
+
+    return {
+        "today": str(today),
+        "databases": [
+            {"name": db, "tables": tables_}
+            for db, tables_ in databases.items()
+        ],
+    }
+
+
 def last_youtube_sync() -> str | None:
     """Newest `fetched_at` in the YouTube dimension tables, if any."""
     result = shared_client().query("SELECT max(fetched_at) FROM youtube.channel")

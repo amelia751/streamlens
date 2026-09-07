@@ -137,18 +137,17 @@ export function PromoMachine({
         <Stat
           label="Channels"
           value={commas(roster.length)}
-          hint={market || kind ? "matching filters" : "verified Netflix-operated"}
+          hint={market || kind ? "in this cut" : undefined}
         />
-        <Stat label="Combined subscribers" value={compact(subs)} />
+        <Stat label="Subscribers" value={compact(subs)} />
         <Stat
-          label="Shorts share"
+          label="Shorts"
           value={`${Math.round((shorts / Math.max(shorts + longForm, 1)) * 100)}%`}
-          hint={`last ${windowLabel}`}
+          hint={windowLabel}
         />
         <Stat
-          label="Catalogue-linked"
+          label="Linked"
           value={`${Math.round((linked / Math.max(shorts + longForm, 1)) * 100)}%`}
-          hint="clips carrying a title id"
         />
       </Stats>
 
@@ -189,11 +188,11 @@ export function PromoMachine({
         />
       </ControlBar>
 
-      <div className="mb-5 grid gap-4 lg:grid-cols-3">
+      <div className="mb-3 grid gap-3 lg:grid-cols-3">
         <Reveal className="lg:col-span-2">
           <Panel
-            title="Upload cadence"
-            subtitle="Monthly output, split by format."
+            title="Uploads by month"
+            subtitle="How many videos went up each month, split into Shorts and long form."
           >
             <StackedBars data={byMonth} />
           </Panel>
@@ -201,7 +200,7 @@ export function PromoMachine({
 
         <Reveal delay={0.08}>
           <Panel
-            title="Format mix"
+            title="Shorts"
             subtitle={`Share of uploads that were Shorts over the last ${windowLabel}.`}
           >
             <ShareRing shorts={shorts} longForm={longForm} />
@@ -219,10 +218,10 @@ export function PromoMachine({
         </Reveal>
       </div>
 
-      <Reveal delay={0.1} className="mb-5">
+      <Reveal delay={0.1} className="mb-3">
         <Panel
-          title="Output by market"
-            subtitle="Uploads per market. The note is the share carrying a catalogue id."
+          title="Uploads by market"
+          subtitle="% with a catalogue id"
         >
           <BarList
             tone="teal"
@@ -236,11 +235,11 @@ export function PromoMachine({
         </Panel>
       </Reveal>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         <Reveal delay={0.12}>
           <Panel
-            title="Channel roster"
-            subtitle="Latest snapshot per channel."
+            title="Channels"
+            subtitle="Latest subscribers, views, and videos loaded for each channel."
           >
             <SortableTable
               rows={roster}
@@ -275,8 +274,8 @@ export function PromoMachine({
 
         <Reveal delay={0.16}>
           <Panel
-            title="Widest campaigns"
-            subtitle="Grouped by the catalogue id in the video description."
+            title="Campaigns"
+            subtitle="Clips grouped by the Netflix title id in the description, not by the video title."
           >
             <DataTable
               rows={campaigns}

@@ -217,8 +217,8 @@ export function TitleDialog({
                     <div className="mb-5 grid gap-4 lg:grid-cols-3">
                       <Panel
                         className="lg:col-span-2"
-                        title="Global rank trajectory"
-                        subtitle="Higher on the chart is a better rank. Yellow marks a week at #1."
+                        title="Rank"
+                        subtitle="Weekly global rank. Higher on the chart is better; yellow is a week at #1."
                       >
                         <RankLine
                           points={trajectory.map((r) => ({
@@ -230,8 +230,8 @@ export function TitleDialog({
                         />
                       </Panel>
                       <Panel
-                        title="Promo footprint"
-                        subtitle="Channels that carried this title."
+                        title="Channels"
+                        subtitle="YouTube channels that promoted this title."
                       >
                         <BarList
                           tone="purple"
@@ -248,8 +248,8 @@ export function TitleDialog({
 
                     <div className="grid gap-4 lg:grid-cols-2">
                       <Panel
-                        title="Country footprint"
-                        subtitle="Best rank and weeks in each country."
+                        title="Countries"
+                        subtitle="Best rank and how many weeks it charted in each country."
                       >
                         <DataTable
                           rows={footprint.slice(0, 80)}
@@ -276,8 +276,8 @@ export function TitleDialog({
                         />
                       </Panel>
                       <Panel
-                        title="Promo clips"
-                        subtitle="Newest first. Retained 30 days."
+                        title="Clips"
+                        subtitle="Promo videos for this title, newest first."
                       >
                         <DataTable
                           rows={clips}

@@ -16,7 +16,9 @@ from __future__ import annotations
 from typing import Any
 
 from streamlens.dashboards import charts, store
+from streamlens.dashboards.glance import glance
 from streamlens.dashboards.spec import SpecError
+from streamlens.services.clickhouse.catalog import read_schema_brief
 
 CHART_TYPE_HELP = charts.type_list()
 
@@ -68,28 +70,98 @@ def _failed(message: str) -> dict[str, Any]:
     return {"ok": False, "problems": [message]}
 
 
+def warehouse_overview() -> dict[str, Any]:
+    """One look at the warehouse: today's date, databases, tables, columns.
+
+    Call this once at the start of a session instead of list_databases and
+    list_tables. Skip streamlens — that is the dashboard store, not a
+    dataset — and do not walk system or empty databases after this.
+    """
+    try:
+        return {"ok": True, **read_schema_brief()}
+    except Exception as exc:
+        return _failed(str(exc))
+
+
 def preview_query(query: str) -> dict[str, Any]:
     """Run a SELECT and see what it returns, without saving anything.
 
-    Call this before adding a panel when unsure of the column names or the
-    shape of the result. The query runs read-only.
+    Prefer this over a second identical ClickHouse query when you are about
+    to draw a chart. `glance` has first/last rows and min/max so you can
+    caption from this result. Do not preview and then add the same SELECT
+    — add_panel returns the same glance.
 
     Args:
         query: a single SELECT (or WITH ... SELECT) statement.
-
-    Returns:
-        The column names, their ClickHouse types, and up to five sample rows.
     """
     try:
-        result = store.run_panel_query(query, limit=50)
+        result = store.run_panel_query(query, limit=200)
     except store.DashboardError as exc:
         return _failed(str(exc))
     return {
         "ok": True,
         "columns": result["columns"],
         "types": result["types"],
-        "sample_rows": result["rows"][:5],
+        "sample_rows": result["rows"][:12],
         "row_count": len(result["rows"]),
+        "glance": glance(result["columns"], result["types"], result["rows"]),
+    }
+
+
+def read_panels(dashboard_id: str, panel_id: str = "") -> dict[str, Any]:
+    """Replay saved panel queries and return the numbers the charts draw.
+
+    This is how you look at a dashboard that is already on the canvas.
+    get_dashboard only returns specs; this runs each SELECT and gives you
+    sample rows plus a glance (first/last, min/max). Call it before you
+    caption or edit an existing chart.
+
+    Args:
+        dashboard_id: the dashboard to read.
+        panel_id: one panel id, or "" to read every panel.
+    """
+    try:
+        dashboard = store.get_dashboard(dashboard_id)
+    except store.DashboardError as exc:
+        return _failed(str(exc))
+
+    wanted = [p for p in dashboard.panels if not panel_id or p.id == panel_id]
+    if panel_id and not wanted:
+        known = ", ".join(p.id for p in dashboard.panels) or "none"
+        return _failed(f"no panel {panel_id!r} on {dashboard_id!r}; panels are: {known}")
+
+    panels: list[dict[str, Any]] = []
+    for panel in wanted:
+        try:
+            result = store.run_panel_query(panel.query, limit=200)
+        except store.DashboardError as exc:
+            panels.append(
+                {
+                    "id": panel.id,
+                    "title": panel.title,
+                    "ok": False,
+                    "problems": [str(exc)],
+                }
+            )
+            continue
+        panels.append(
+            {
+                "id": panel.id,
+                "title": panel.title,
+                "ok": True,
+                "spec": panel.spec.to_dict(),
+                "columns": result["columns"],
+                "types": result["types"],
+                "sample_rows": result["rows"][:12],
+                "row_count": len(result["rows"]),
+                "glance": glance(result["columns"], result["types"], result["rows"]),
+            }
+        )
+    return {
+        "ok": True,
+        "dashboard_id": dashboard.id,
+        "title": dashboard.title,
+        "panels": panels,
     }
 
 
@@ -199,8 +271,8 @@ def add_panel(
         series: optional column to split one measure into several lines or
             bars, e.g. "channel". Do not combine with several y columns.
         value: the single measure for charts whose dimensions occupy other
-            slots — heatmap, calendar, treemap, sunburst, sankey, map, graph
-            and tree.
+            slots — heatmap, calendar, treemap, sunburst, sankey, map, graph,
+            tree, chord and lines.
         path: the columns forming a hierarchy for treemap and sunburst,
             outermost first, e.g. ["genre", "title"].
         source: the column a sankey flow leaves.
@@ -210,7 +282,7 @@ def add_panel(
         width: grid width out of 12. Use 12 for a full-width time series,
             6 for a half, 3 for a small stat.
         height: 1, 2 or 3 rows tall. Give a map, treemap, calendar, radar,
-            graph, tree or themeRiver 2.
+            graph, tree, themeRiver, chord, parallel or lines 2.
     """
     kind = charts.chart(chart_type)
     if kind is None:
@@ -337,7 +409,9 @@ def delete_panel(dashboard_id: str, panel_id: str) -> dict[str, Any]:
 
 # The full surface, in the order a model would normally reach for them.
 DASHBOARD_TOOLS = [
+    warehouse_overview,
     preview_query,
+    read_panels,
     list_dashboards,
     get_dashboard,
     create_dashboard,
