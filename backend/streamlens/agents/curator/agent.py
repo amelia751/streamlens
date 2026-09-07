@@ -16,6 +16,7 @@ from google.adk.agents import Agent
 from google.adk.code_executors import BuiltInCodeExecutor
 from google.adk.tools.mcp_tool import McpToolset
 
+from streamlens.dashboards import charts
 from streamlens.mcp.toolset import dashboard_toolset
 from streamlens.services.clickhouse import clickhouse_toolset
 from streamlens.services.gcp import gemini_model
@@ -57,13 +58,7 @@ Then, for each panel:
 
 # Choosing a chart
 
-- `line` for a measure over time. `area` when the total matters more than
-  each level, `stacked: true` when the parts sum to a meaningful whole.
-- `bar` for comparing categories, or for counts per period.
-- `scatter` for the relationship between two measures.
-- `pie` only for a share of a whole with at most about six slices.
-- `stat` for a single headline number.
-- `table` when the rows are the point — names, ids, long tails.
+{charts}
 
 Use `series` to split one measure across a dimension, e.g. `y: ["views"]`
 with `series: "channel"`. Use several `y` columns for genuinely different
@@ -95,6 +90,11 @@ shows — a number worth noticing, a trend, an outlier. The chart is the
 artifact; your message is the caption, not a description of your tool calls.
 Never state a figure you have not read from a query result.
 """
+
+# The chart list comes from the registry rather than the prose above, so the
+# agent is never told about a type the tools would reject, or left unaware of
+# one they would accept.
+INSTRUCTION = INSTRUCTION.replace("{charts}", charts.guide())
 
 def build_toolsets() -> dict[str, McpToolset]:
     """The agent's two MCP servers, labelled so a failure can be named.

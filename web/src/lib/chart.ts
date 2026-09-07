@@ -358,13 +358,17 @@ function pieMedia() {
     {
       query: { maxWidth: NARROW },
       option: {
-        legend: { itemGap: 8, textStyle: { fontSize: 10 } },
+        // Too narrow to wrap the names without eating the ring, so the
+        // legend paginates instead.
+        legend: { type: "scroll", itemGap: 8, textStyle: { fontSize: 10 } },
         series: [{ radius: ["42%", "68%"], center: ["50%", "38%"] }],
       },
     },
     {
       option: {
-        legend: { itemGap: 14, textStyle: { fontSize: 11 } },
+        // With room, every slice is named at once. Pagination arrows for
+        // the handful of slices a donut should have is just clutter.
+        legend: { type: "plain", itemGap: 14, textStyle: { fontSize: 11 } },
         series: [{ radius: ["48%", "74%"], center: ["50%", "42%"] }],
       },
     },
@@ -616,11 +620,9 @@ function pieOption(
         },
       },
       // The legend names every slice, so leader-line labels would say the
-      // same thing twice and collide doing it. Scrolling keeps a long list
-      // from eating the ring on a narrow tile.
+      // same thing twice and collide doing it.
       legend: {
         bottom: 0,
-        type: "scroll" as const,
         itemWidth: 10,
         itemHeight: 10,
         icon: "roundRect" as const,

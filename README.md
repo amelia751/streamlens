@@ -117,8 +117,8 @@ python3 scripts/youtube/sync.py --backfill  # full crawl; --resume reuses cached
 cd backend && uv sync
 uv run uvicorn streamlens.api:app --port 8000
 
-# 3. frontend
-cd frontend && npm install && npm run dev   # http://localhost:3000
+# 3. web
+cd web && npm install && npm run dev   # http://localhost:3000
 ```
 
 `GET /health` confirms the ClickHouse connection. `GET /api/queries` lists every

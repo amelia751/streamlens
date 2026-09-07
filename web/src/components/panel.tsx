@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts";
 
-import type { Panel, PanelData, ValueFormat } from "@/lib/api";
+import type { ChartType, Panel, PanelData, ValueFormat } from "@/lib/api";
 import { chartOption, formatValue, statNumber, statValue } from "@/lib/chart";
 
 function useResize(
@@ -89,6 +89,41 @@ function CountUp({ value, format }: { value: number; format: ValueFormat }) {
   }, [value]);
 
   return <>{formatValue(shown, format)}</>;
+}
+
+/**
+ * Whatever a panel's type says it should be.
+ *
+ * Exhaustive on purpose. The chart vocabulary is defined by the backend
+ * registry, and this switch is where the client agrees to it: adding a
+ * member to `ChartType` without adding a case here narrows `kind` to
+ * `never` in the default branch and fails the build. Previously an
+ * unrecognised type fell through and was silently drawn as a line.
+ */
+function TileBody({ kind, data }: { kind: ChartType; data: PanelData }) {
+  switch (kind) {
+    case "table":
+      return <TableBlock data={data} />;
+    case "stat":
+      return <StatBlock data={data} />;
+    case "line":
+    case "area":
+    case "bar":
+    case "scatter":
+    case "pie":
+      return <Chart data={data} />;
+    default: {
+      // Unreachable while every member of ChartType has a case above, which
+      // is what makes this assignment compile. It still renders, because a
+      // client can be older than the backend that sent the panel.
+      const unhandled: never = kind;
+      return (
+        <p className="tile-error">
+          This build has no renderer for a {String(unhandled)} panel.
+        </p>
+      );
+    }
+  }
 }
 
 function StatBlock({ data }: { data: PanelData }) {
@@ -216,11 +251,7 @@ export function PanelCard({
       <div className="tile-body">
         {error && <p className="tile-error">{error}</p>}
         {!error && !data && <p className="tile-waiting">Running query…</p>}
-        {data && kind === "table" && <TableBlock data={data} />}
-        {data && kind === "stat" && <StatBlock data={data} />}
-        {data && kind !== "table" && kind !== "stat" && (
-          <Chart data={data} />
-        )}
+        {data && <TileBody kind={kind} data={data} />}
       </div>
     </article>
   );

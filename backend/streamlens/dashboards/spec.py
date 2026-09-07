@@ -14,9 +14,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-CHART_TYPES = ("line", "bar", "area", "scatter", "pie", "table", "stat")
+from streamlens.dashboards.charts import CHART_TYPES, chart, type_list
 
 VALUE_FORMATS = ("number", "compact", "percent", "bytes", "duration", "currency")
+
+__all__ = ["CHART_TYPES", "PanelSpec", "SpecError", "VALUE_FORMATS", "parse_spec", "validate_spec"]
 
 
 class SpecError(ValueError):
@@ -50,9 +52,7 @@ def parse_spec(raw: dict) -> PanelSpec:
 
     chart_type = str(raw.get("type", "")).strip().lower()
     if chart_type not in CHART_TYPES:
-        raise SpecError(
-            f"unknown chart type {chart_type!r}; use one of {', '.join(CHART_TYPES)}"
-        )
+        raise SpecError(f"unknown chart type {chart_type!r}; use one of {type_list()}")
 
     y_raw = raw.get("y") or []
     if isinstance(y_raw, str):
@@ -78,53 +78,61 @@ def parse_spec(raw: dict) -> PanelSpec:
     )
 
 
-# What each chart type needs before it can be drawn.
-_REQUIRES_X = ("line", "bar", "area", "scatter", "pie")
-_SINGLE_Y = ("pie", "stat")
+def _columns_for(spec: PanelSpec, channel: str) -> list[str]:
+    """The columns the spec put in one channel, always as a list."""
+    value = getattr(spec, channel, None)
+    if value is None or value == "":
+        return []
+    return list(value) if isinstance(value, list) else [str(value)]
 
 
 def validate_spec(spec: PanelSpec, columns: list[str]) -> list[str]:
     """Check the spec against the columns the query returned.
 
+    Every rule comes from the chart registry rather than from lists kept
+    here, so a type cannot be described to the model in terms that
+    validation would then reject.
+
     Returns a list of problems, each phrased so the model can fix it without
     another round trip. An empty list means the panel is drawable.
     """
+    kind = chart(spec.type)
+    if kind is None:
+        return [f"unknown chart type {spec.type!r}; use one of {type_list()}"]
+
     problems: list[str] = []
     available = ", ".join(columns) or "none"
 
-    def known(channel: str, column: str) -> None:
-        if column not in columns:
+    for channel in kind.channels:
+        chosen = _columns_for(spec, channel.name)
+
+        if not chosen:
+            if channel.required:
+                problems.append(
+                    f"a {kind.name} panel needs {'at least one' if channel.many else 'an'} "
+                    f"'{channel.name}' column — {channel.describe}"
+                )
+            continue
+
+        if not channel.many and len(chosen) > 1:
             problems.append(
-                f"{channel} column {column!r} is not in the query result; "
-                f"the query returns: {available}"
+                f"a {kind.name} panel takes exactly one '{channel.name}' column, "
+                f"got {len(chosen)}"
             )
 
-    if spec.type in _REQUIRES_X:
-        if not spec.x:
-            problems.append(f"a {spec.type} panel needs an 'x' column")
-        else:
-            known("x", spec.x)
+        for column in chosen:
+            if column not in columns:
+                problems.append(
+                    f"{channel.name} column {column!r} is not in the query result; "
+                    f"the query returns: {available}"
+                )
 
-    if spec.type == "table":
-        # A table draws whatever the query returns, so it needs no channels.
-        return problems
-
-    if not spec.y:
-        problems.append(f"a {spec.type} panel needs at least one 'y' column")
-    for column in spec.y:
-        known("y", column)
-
-    if spec.type in _SINGLE_Y and len(spec.y) > 1:
+    # Splitting by a dimension and plotting several measures are two ways to
+    # get multiple series, and asking for both leaves the split ambiguous.
+    if kind.splits and spec.series and len(spec.y) > 1:
         problems.append(
-            f"a {spec.type} panel takes exactly one 'y' column, got {len(spec.y)}"
+            "use either 'series' to split one measure into lines, or "
+            "several 'y' columns — not both"
         )
-
-    if spec.series:
-        known("series", spec.series)
-        if len(spec.y) > 1:
-            problems.append(
-                "use either 'series' to split one measure into lines, or "
-                "several 'y' columns — not both"
-            )
 
     return problems

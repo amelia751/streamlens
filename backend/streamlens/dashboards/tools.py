@@ -15,10 +15,27 @@ from __future__ import annotations
 
 from typing import Any
 
-from streamlens.dashboards import store
+from streamlens.dashboards import charts, store
 from streamlens.dashboards.spec import CHART_TYPES, SpecError
 
-CHART_TYPE_HELP = ", ".join(CHART_TYPES)
+CHART_TYPE_HELP = charts.type_list()
+
+
+def _documents_charts(fn):
+    """Fill the `{charts}` slot in a tool's docstring from the registry.
+
+    The docstring is what the model reads before choosing a chart, so it is
+    generated rather than written out. Listing the types by hand is how the
+    documentation and the validation drifted apart in the first place.
+    """
+    doc = fn.__doc__ or ""
+    for line in doc.splitlines():
+        if "{charts}" in line:
+            pad = line[: len(line) - len(line.lstrip())]
+            doc = doc.replace(line, charts.guide(indent=pad))
+            break
+    fn.__doc__ = doc
+    return fn
 
 
 def _spec(
@@ -135,6 +152,7 @@ def delete_dashboard(dashboard_id: str) -> dict[str, Any]:
     return {"ok": True, "deleted_panels": removed}
 
 
+@_documents_charts
 def add_panel(
     dashboard_id: str,
     title: str,
@@ -159,10 +177,11 @@ def add_panel(
         title: the panel's title.
         query: a single SELECT returning the columns named below. Keep it
             aggregated — a panel plots at most a few thousand points.
-        chart_type: one of line, bar, area, scatter, pie, table, stat.
-        x: the column on the horizontal axis, usually a date. Required for
-            line, bar, area, scatter and pie. Leave "" for table and stat.
-        y: the measure columns to plot. One for pie and stat.
+        chart_type: which chart to draw. Leave a column argument as "" when
+            the type below does not take it.
+            {charts}
+        x: the column on the horizontal axis, usually a date.
+        y: the measure columns to plot.
         series: optional column to split one measure into several lines or
             bars, e.g. "channel". Do not combine with several y columns.
         stacked: stack the series instead of overlaying them.
@@ -186,6 +205,7 @@ def add_panel(
         return _failed(str(exc))
 
 
+@_documents_charts
 def update_panel(
     dashboard_id: str,
     panel_id: str,
@@ -214,6 +234,7 @@ def update_panel(
         title: new title, or "".
         query: new SELECT, or "".
         chart_type: new chart type, or "" to keep the current one.
+            {charts}
         x: horizontal axis column, used when chart_type is given.
         y: measure columns, used when chart_type is given.
         series: split column, used when chart_type is given.
