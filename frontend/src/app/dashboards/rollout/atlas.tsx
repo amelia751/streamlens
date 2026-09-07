@@ -166,7 +166,6 @@ export function RolloutAtlas({
                 rows={numberOnes}
                 initialSort="country_name"
                 initialDir="asc"
-                pageSize={15}
                 empty="No number ones match this search."
                 columns={[
                   { key: "country_name", label: "Country" },
@@ -191,7 +190,6 @@ export function RolloutAtlas({
               rows={filtered}
               initialSort="country_name"
               initialDir="asc"
-              pageSize={30}
               empty="No placements match this search."
               columns={[
                 { key: "country_name", label: "Country" },

@@ -12,7 +12,7 @@ import threading
 import clickhouse_connect
 from clickhouse_connect.driver.client import Client
 
-from streamlens.config import clickhouse_settings
+from streamlens.config import clickhouse_reader_settings, clickhouse_settings
 
 _local = threading.local()
 
@@ -35,8 +35,26 @@ def shared_client() -> Client:
     return client
 
 
+def reader_client() -> Client:
+    """A thread-bound client on the SELECT-only identity.
+
+    Every query the model had a hand in — the MCP server's SQL and each
+    panel's query — goes through this. The privilege boundary is in
+    ClickHouse's grants, so it holds even if a future code path forgets to
+    ask for read-only.
+    """
+    client = getattr(_local, "reader", None)
+    if client is None:
+        client = _connect(clickhouse_reader_settings())
+        _local.reader = client
+    return client
+
+
 def get_client() -> Client:
-    settings = clickhouse_settings()
+    return _connect(clickhouse_settings())
+
+
+def _connect(settings) -> Client:
     return clickhouse_connect.get_client(
         host=settings.host,
         port=int(settings.port),

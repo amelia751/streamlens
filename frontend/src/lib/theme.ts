@@ -33,5 +33,4 @@ export const ROOMS: Record<
   greenlight: { tone: "yellow", icon: "star", kicker: "Promo vs outcome" },
   rollout: { tone: "blue", icon: "diamond", kicker: "Country Top 10" },
   promo: { tone: "green", icon: "tiles", kicker: "YouTube operation" },
-  title: { tone: "purple", icon: "plus", kicker: "Title" },
 };

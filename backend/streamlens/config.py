@@ -8,7 +8,7 @@ running somewhere without that directory (Cloud Run, CI).
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -114,6 +114,39 @@ class ClickHouseSettings:
         return env
 
 
+@dataclass(frozen=True)
+class ClickHouseCloudSettings:
+    """Credentials for the Cloud control plane, not the SQL interface.
+
+    Separate from ClickHouseSettings because these manage the service
+    (ClickPipes, backups, scaling) and must never reach the browser.
+    """
+
+    api_key: str
+    api_secret: str
+    organization_id: str
+    service_id: str
+    service_name: str
+
+    @property
+    def clickpipes_url(self) -> str:
+        return (
+            "https://api.clickhouse.cloud/v1"
+            f"/organizations/{self.organization_id}"
+            f"/services/{self.service_id}/clickpipes"
+        )
+
+
+def clickhouse_cloud_settings() -> ClickHouseCloudSettings:
+    return ClickHouseCloudSettings(
+        api_key=_require("CLICKHOUSE_CLOUD_API_KEY"),
+        api_secret=_require("CLICKHOUSE_CLOUD_API_SECRET"),
+        organization_id=_require("CLICKHOUSE_ORG_ID"),
+        service_id=_require("CLICKHOUSE_SERVICE_ID"),
+        service_name=os.environ.get("CLICKHOUSE_SERVICE", "streamlens"),
+    )
+
+
 def google_cloud_settings() -> GoogleCloudSettings:
     sa_key = SECRETS_DIR / "pctg-sa.json"
     return GoogleCloudSettings(
@@ -124,6 +157,23 @@ def google_cloud_settings() -> GoogleCloudSettings:
         model=os.environ.get("STREAMLENS_MODEL", "gemini-3.8-flash"),
         credentials_path=sa_key if sa_key.exists() else None,
     )
+
+
+def clickhouse_reader_settings() -> ClickHouseSettings:
+    """The least-privilege identity for anything the model influences.
+
+    `streamlens_reader` holds SELECT and nothing else, so a write is refused
+    by ClickHouse rather than by an application check. Falls back to the
+    admin credentials when the reader has not been created yet, so a fresh
+    checkout still works; run scripts/clickhouse/create_reader.py to get the
+    real boundary.
+    """
+    base = clickhouse_settings()
+    user = os.environ.get("CLICKHOUSE_READER_USER")
+    password = os.environ.get("CLICKHOUSE_READER_PASSWORD")
+    if not user or not password:
+        return base
+    return replace(base, user=user, password=password)
 
 
 def clickhouse_settings() -> ClickHouseSettings:

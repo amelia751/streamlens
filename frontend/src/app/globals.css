@@ -379,6 +379,11 @@ a {
   color: #8c1a2b99;
 }
 
+.table-scroll {
+  max-height: 22rem;
+  overflow: auto;
+}
+
 .data-table {
   width: 100%;
   border-collapse: collapse;
@@ -386,8 +391,13 @@ a {
 }
 
 .data-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   padding: 0.45rem 0.5rem;
   border-bottom: 1px solid var(--line);
+  background: var(--paper);
+  box-shadow: 0 1px 0 var(--line);
   font-size: 0.72rem;
   font-weight: 500;
   color: var(--muted);
