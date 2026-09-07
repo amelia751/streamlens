@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts";
 
-import type { ChartType, Panel, PanelData, ValueFormat } from "@/lib/api";
+import type { ChartType, PanelData, PanelView, ValueFormat } from "@/lib/api";
 import { loadWorldAtlas, type WorldAtlas } from "@/lib/atlas";
 import { chartOption, formatValue, statNumber, statValue } from "@/lib/chart";
 
@@ -241,13 +241,23 @@ function TableBlock({ data }: { data: PanelData }) {
   );
 }
 
+/**
+ * One panel, drawn from whatever route its owner says holds its rows.
+ *
+ * The URL is passed in rather than derived from the panel, because a panel
+ * on a dashboard and a proposal's own copy of one are stored in different
+ * tables and served by different routes while drawing identically. One
+ * renderer, two owners.
+ */
 export function PanelCard({
   panel,
+  dataUrl,
   expanded = false,
   onToggle,
   reloadKey,
 }: {
-  panel: Panel;
+  panel: PanelView;
+  dataUrl: string;
   expanded?: boolean;
   onToggle?: () => void;
   reloadKey?: number;
@@ -260,9 +270,7 @@ export function PanelCard({
   useEffect(() => {
     const ac = new AbortController();
 
-    fetch(`/api/dashboards/${panel.dashboard_id}/panels/${panel.id}`, {
-      signal: ac.signal,
-    })
+    fetch(dataUrl, { signal: ac.signal })
       .then(async (res) => {
         if (!res.ok) throw new Error(await res.text());
         return res.json() as Promise<PanelData>;
@@ -274,7 +282,7 @@ export function PanelCard({
       });
 
     return () => ac.abort();
-  }, [panel.dashboard_id, panel.id, reloadKey ?? 0]);
+  }, [dataUrl, reloadKey ?? 0]);
 
   const kind = panel.spec.type;
 

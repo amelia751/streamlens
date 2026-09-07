@@ -37,6 +37,7 @@ type WorkspaceValue = {
   /** Bumped when a dashboard changes underneath us; panels refetch on it. */
   revision: number;
   touchDashboard: (dashboardId: string) => void;
+  touchProposal: (proposalId: string) => void;
 };
 
 const WorkspaceContext = createContext<WorkspaceValue | null>(null);
@@ -134,6 +135,22 @@ export function Workspace({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  /**
+   * The agent wrote a proposal. Same contract as a dashboard: open it if it
+   * is not already open, because a one-sheet nobody can see was not really
+   * written, and bump the revision so the rail picks it up.
+   */
+  const touchProposal = useCallback((proposalId: string) => {
+    const id = `proposal:${proposalId}`;
+    setTabs((current) =>
+      current.some((t) => t.id === id)
+        ? current
+        : [...current, { kind: "proposal", id, proposalId, label: proposalId }],
+    );
+    setActiveId(id);
+    setRevision((n) => n + 1);
+  }, []);
+
   const value = useMemo<WorkspaceValue>(
     () => ({
       tabs,
@@ -149,6 +166,7 @@ export function Workspace({ children }: { children: React.ReactNode }) {
       },
       revision,
       touchDashboard,
+      touchProposal,
     }),
     [
       tabs,
@@ -159,6 +177,7 @@ export function Workspace({ children }: { children: React.ReactNode }) {
       closeTab,
       revision,
       touchDashboard,
+      touchProposal,
     ],
   );
 

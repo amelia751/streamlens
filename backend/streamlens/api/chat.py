@@ -1,9 +1,10 @@
-"""The curator, streamed to the browser over server-sent events.
+"""The analyst, streamed to the browser over server-sent events.
 
 The canvas is not redrawn from anything the model says. When a tool call
-changes a dashboard we emit a `canvas` event carrying only its id, and the
-browser refetches that dashboard through the ordinary REST route. So the
-chat can be wrong about what it built and the canvas still shows the truth.
+changes a dashboard we emit a `canvas` event carrying only its id, and when
+one changes a proposal a `proposal` event carrying only its id; the browser
+refetches through the ordinary REST route either way. So the chat can be
+wrong about what it built and the canvas still shows the truth.
 """
 
 from __future__ import annotations
@@ -30,6 +31,18 @@ MUTATING = {
     "delete_panel",
 }
 
+# The same, for proposals. Kept apart because the two emit different events
+# and the browser opens a different kind of tab for each.
+MUTATING_PROPOSALS = {
+    "create_proposal",
+    "update_proposal",
+    "delete_proposal",
+    "adopt_panel",
+    "add_proposal_panel",
+    "delete_proposal_panel",
+    "generate_still",
+}
+
 # Names worth showing while the user waits. Everything else streams as a
 # generic "working" line rather than leaking tool plumbing into the UI.
 ACTIVITY = {
@@ -50,6 +63,17 @@ ACTIVITY = {
     "delete_panel": "removing a panel",
     "google_search": "searching the web",
     "google_search_agent": "searching the web",
+    "list_proposals": "looking at your proposals",
+    "read_proposal": "reading the proposal",
+    "create_proposal": "writing the proposal",
+    "update_proposal": "revising the proposal",
+    "delete_proposal": "deleting the proposal",
+    "adopt_panel": "putting a chart on the proposal",
+    "add_proposal_panel": "adding a chart to the proposal",
+    "delete_proposal_panel": "removing a chart from the proposal",
+    # Named rather than generic because it is the one call that takes long
+    # enough for a spinner with no label to look stuck.
+    "generate_still": "generating the still",
 }
 
 # Conversation history outlives any one turn; the MCP connections do not.
@@ -61,7 +85,7 @@ async def unreachable(toolsets: dict) -> list[str]:
 
     Worth paying a round trip for. When a toolset fails to load, the ADK logs
     a warning and runs the agent without it — so an unreachable warehouse
-    turns into a curator that confidently invents column names instead of an
+    turns into an analyst that confidently invents column names instead of an
     error anyone notices.
     """
     broken = []
@@ -90,18 +114,25 @@ def _sse(event: dict) -> str:
     return f"data: {json.dumps(event)}\n\n"
 
 
-def _dashboard_id(args: dict, response: object) -> str | None:
-    """Find the dashboard a tool call touched, from its args or its result."""
-    if isinstance(args, dict) and args.get("dashboard_id"):
-        return str(args["dashboard_id"])
-    # create_dashboard only reveals the id in its result.
+def _touched(key: str, args: dict, response: object) -> str | None:
+    """Find the id a tool call touched, from its args or from its result.
+
+    `key` is "dashboard_id" or "proposal_id". A create call only reveals the
+    id in its result, and MCP wraps that result one level deeper, so both
+    places are checked.
+    """
+    if isinstance(args, dict) and args.get(key):
+        return str(args[key])
     if isinstance(response, dict):
-        for key in ("dashboard_id", "id"):
-            if key in response:
-                return str(response[key])
+        if response.get(key):
+            return str(response[key])
+        # `id` is only trustworthy on a call that had no id of its own to
+        # begin with, which is exactly the create case.
+        if not (isinstance(args, dict) and args.get(key)) and response.get("id"):
+            return str(response["id"])
         nested = response.get("structuredContent") or response.get("result")
-        if isinstance(nested, dict) and nested.get("dashboard_id"):
-            return str(nested["dashboard_id"])
+        if isinstance(nested, dict) and nested.get(key):
+            return str(nested[key])
     return None
 
 
@@ -113,7 +144,7 @@ async def stream_turn(
     Reconnecting costs a second or two against a turn that runs for a minute,
     which is a good trade for never serving a stale session.
     """
-    from streamlens.agents.curator import build_agent, build_toolsets
+    from streamlens.agents.analyst import build_agent, build_toolsets
 
     toolsets = build_toolsets()
     runner = Runner(
@@ -163,10 +194,21 @@ async def stream_turn(
                         response = part.function_response
                         args = pending.pop(response.id or response.name, {})
                         if response.name in MUTATING:
-                            touched = _dashboard_id(args, response.response)
+                            touched = _touched(
+                                "dashboard_id", args, response.response
+                            )
                             if touched:
                                 yield _sse(
                                     {"type": "canvas", "dashboard_id": touched}
+                                )
+
+                        elif response.name in MUTATING_PROPOSALS:
+                            touched = _touched(
+                                "proposal_id", args, response.response
+                            )
+                            if touched:
+                                yield _sse(
+                                    {"type": "proposal", "proposal_id": touched}
                                 )
 
                     elif getattr(part, "thought", None) and part.text:

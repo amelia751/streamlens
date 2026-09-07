@@ -1,4 +1,4 @@
-"""The chart vocabulary: every type the curator can ask for, in one place.
+"""The chart vocabulary: every type the analyst can ask for, in one place.
 
 This exists because the vocabulary used to be written down five times — the
 tuple that gates it, the tuple listing which types need an x column, the

@@ -1,13 +1,46 @@
 /**
  * Theme proposals the analyst drafts for filmmakers.
  *
- * List and detail both come from `/api/mock/proposals` today. Swap that
- * prefix for `/api/proposals` when the warehouse starts writing them.
+ * A proposal owns its charts rather than pointing at a dashboard's. The
+ * panels below are the proposal's own copies, fetched with the document
+ * and replayed from `/api/proposals/:id/panels/:panelId`, so deleting or
+ * editing the dashboard a chart was adopted from cannot change or break
+ * the pitch. `source_dashboard_*` is provenance — a label to render, never
+ * an id to follow.
  */
+
+import { BACKEND_URL, type PanelSpec } from "@/lib/api";
 
 export type ProposalArchetype = {
   name: string;
   note: string;
+};
+
+/** A chart the proposal owns, with a note of where it was adopted from. */
+export type ProposalPanel = {
+  proposal_id: string;
+  id: string;
+  title: string;
+  query: string;
+  spec: PanelSpec;
+  position: number;
+  width: number;
+  height: number;
+  source_dashboard_id: string;
+  source_panel_id: string;
+  source_query_hash: string;
+};
+
+/** A generated still. The bytes are served by the backend, never publicly. */
+export type ProposalStill = {
+  id: string;
+  content_type: string;
+  bytes: number;
+  prompt: string;
+  model: string;
+  aspect_ratio: string;
+  position: number;
+  url: string;
 };
 
 export type ProposalSummary = {
@@ -15,35 +48,39 @@ export type ProposalSummary = {
   title: string;
   genre: string;
   kicker: string;
-  still: string;
-  dashboard_id: string;
-  dashboard_title: string;
+  source_dashboard_id: string;
+  source_dashboard_title: string;
+  panel_count: number;
+  /** Null when nothing was generated; the report falls back to a gradient. */
+  still_url: string | null;
 };
 
-export type Proposal = ProposalSummary & {
+export type Proposal = {
+  id: string;
+  title: string;
+  genre: string;
+  kicker: string;
   budget: string;
   hook: string;
   logline: string;
   connection: string;
-  stills: string[];
-  archetypes: ProposalArchetype[];
   story: string;
   market: string;
+  archetypes: ProposalArchetype[];
+  source_dashboard_id: string;
+  source_dashboard_title: string;
+  panels: ProposalPanel[];
+  stills: ProposalStill[];
+  still_url: string | null;
 };
 
-export type ProposalList = {
-  proposals: ProposalSummary[];
-};
-
-export async function fetchProposals(): Promise<ProposalSummary[]> {
-  const res = await fetch("/api/mock/proposals", { cache: "no-store" });
-  if (!res.ok) throw new Error(`proposals ${res.status}`);
-  const body = (await res.json()) as ProposalList;
-  return body.proposals ?? [];
-}
-
-export async function fetchProposal(id: string): Promise<Proposal> {
-  const res = await fetch(`/api/mock/proposals/${id}`, { cache: "no-store" });
-  if (!res.ok) throw new Error(`proposal ${res.status}`);
-  return res.json();
+/** The rail's first paint, rendered on the server. */
+export async function fetchProposalsFromBackend(): Promise<ProposalSummary[]> {
+  const res = await fetch(`${BACKEND_URL}/api/proposals`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(`proposals ${res.status}: ${await res.text()}`);
+  }
+  return (await res.json()).proposals ?? [];
 }

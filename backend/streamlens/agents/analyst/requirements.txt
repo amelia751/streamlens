@@ -1,7 +1,14 @@
 # Runtime deps for the analyst agent on Agent Runtime.
 # mcp is pinned <2 because ADK's MCP client requires it; the ClickHouse MCP
 # server needs mcp 2.x and therefore runs in a separate Cloud Run image.
+#
+# google-cloud-storage is here because the agent module imports the proposal
+# toolset even where it does not attach it — see `authoring_enabled()`. On
+# Agent Runtime that check is False, so the dashboard and proposal servers
+# are never started and no warehouse credential is needed; the import still
+# has to resolve.
 google-adk[mcp]>=2.8.0
 mcp>=1.24,<2
 clickhouse-connect>=1.8.0
+google-cloud-storage>=2.19.0
 python-dotenv>=1.0.1

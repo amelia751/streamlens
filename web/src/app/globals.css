@@ -2131,6 +2131,25 @@ a {
   background: linear-gradient(90deg, #161616, #222, #161616);
 }
 
+/*
+ * No still: an image was never generated, generation was blocked, or the
+ * object is gone. All three land here, as a field in the proposal's own
+ * tone rather than as a broken image.
+ */
+.report-hero.is-blank {
+  background:
+    radial-gradient(
+      120% 90% at 78% 8%,
+      color-mix(in srgb, var(--tone, var(--purple)) 62%, #101014) 0%,
+      transparent 62%
+    ),
+    linear-gradient(
+      168deg,
+      color-mix(in srgb, var(--tone, var(--purple)) 34%, #0e0e12) 0%,
+      #101014 74%
+    );
+}
+
 .report-hero img {
   display: block;
   width: 100%;
@@ -2378,6 +2397,48 @@ a {
   grid-auto-rows: 13.5rem;
   gap: 0.75rem;
   margin-top: 0.9rem;
+}
+
+/*
+ * Where the charts were adapted from. A link while that dashboard exists,
+ * plain text once it does not — the sentence reads the same either way.
+ */
+.report-provenance {
+  margin: 0.5rem 0 0;
+  max-width: 40rem;
+  color: var(--faint);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.report-provenance button {
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--tone, var(--purple)) 60%, var(--line));
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.report-provenance button:hover {
+  color: var(--ink);
+}
+
+.report-provenance span {
+  color: var(--muted);
+}
+
+.report-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.9rem;
+  margin: 0 1.25rem 1.4rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+  color: var(--faint);
+  font-size: 0.68rem;
+  line-height: 1.5;
 }
 
 @media (max-width: 1100px) {

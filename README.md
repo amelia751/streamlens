@@ -41,8 +41,15 @@ invisible in either dataset alone.
 ```
 
 **Google Cloud, at runtime:** Vertex AI (`google-genai`, Gemini 3.8 Flash on the
-global endpoint) generates the greenlight brief. Cloud Storage holds the raw
-lake. The YouTube Data API v3 key is issued and restricted in the same project.
+global endpoint) generates the greenlight brief, and Nano Banana Pro
+(`gemini-3-pro-image`, same endpoint) generates the still behind a theme
+proposal. Cloud Storage holds the raw lake in `gs://streamlens-data`, and the
+generated stills in a separate `gs://streamlens-proposals` — separate because
+`raw/` is immutable and a model-driven write path must not share an IAM
+boundary with it. Neither bucket is public; stills are served only through
+[`/api/proposals/{id}/stills/{sid}`](backend/streamlens/api/app.py), so a URL
+cannot outlive the proposal that owns it. The YouTube Data API v3 key is issued
+and restricted in the same project.
 Service-account credentials are loaded in
 [`backend/streamlens/config.py`](backend/streamlens/config.py) and the model is
 constructed in
@@ -67,13 +74,34 @@ MCP toolset in
 | **The Global Rollout** | Which titles travel? The Weekly Top 10 across 94 countries and five years. |
 | **The Promo Machine** | How does the 44-channel operation actually publish? Cadence, Shorts mix, market coverage. |
 | **Title dossier** | One title across every source, with the Gemini brief on top. |
+| **Studio** | The warehouse as a workspace: the live ClickPipe rail, agent-built dashboards on a twelve-column grid, and theme proposals. |
+
+### Two things the agent writes
+
+Both live in the warehouse they describe, in `streamlens.*`, as
+ReplacingMergeTree rows versioned by `updated_at`. Neither ever stores rows —
+only the query — so what is on screen is live.
+
+| | Dashboard | Theme proposal |
+|---|---|---|
+| For | An allocator: *what does the data say?* | A filmmaker: *what should I make?* |
+| Is | A titled grid of panels | A one-sheet — hook, logline, cast, theme — with charts underneath |
+| Tables | `dashboard`, `panel` | `proposal`, `proposal_panel`, `proposal_still` |
+| Charts | Its own | **Copies.** `adopt_panel` duplicates a dashboard panel's query and spec, so deleting or editing that dashboard cannot change or break the pitch. What is kept of the source is a label, never a foreign key |
+| Images | None | Up to three Nano Banana Pro stills in GCS, keyed server-side; the model passes a prompt and nothing else |
+
+That copy rule is the whole design. A proposal someone has read must not
+silently acquire different evidence because a dashboard was edited underneath
+it — and it must not collapse into an error because one was deleted. Schema in
+[`proposals/schema.sql`](backend/streamlens/proposals/schema.sql).
 
 ---
 
 ## Two kinds of agent, on purpose
 
 A chart that hallucinates is worse than no chart, so the model is kept out of
-the chart path entirely.
+the chart path entirely. What differs between the two is how much of the query
+the model gets to choose.
 
 **Deterministic** — [`agents/greenlight`](backend/streamlens/agents/greenlight/agent.py)
 runs the same four named queries in the same order for every title, then hands
@@ -82,8 +110,24 @@ because the model never issues a query. The brief and the dashboard read from
 one registry, so they cannot disagree.
 
 **Exploratory** — [`agents/analyst`](backend/streamlens/agents/analyst/agent.py)
-gives Gemini the ClickHouse MCP toolset and lets it choose its own SQL. Right
-for open-ended questions, wrong for a number someone will act on.
+is the one the Studio chat talks to, and the only agent in the product. Up to
+three MCP servers: ClickHouse to read,
+[dashboards](backend/streamlens/mcp/dashboards.py) to build, and
+[proposals](backend/streamlens/mcp/proposals.py) to pitch. It authors SQL, but
+never *serves* it: a panel's query is validated once when it is saved and
+replayed from storage thereafter, so no chart on the canvas is drawn from
+something the model said this turn.
+
+"Up to three", because the same agent is deployed twice. Beside the API it
+holds warehouse credentials and can author. On Agent Runtime it deliberately
+holds none — it reaches ClickHouse through an IAM-gated Cloud Run MCP that
+holds them itself — so `authoring_enabled()` attaches the warehouse toolset
+alone and assembles an instruction that never mentions a tool it does not have.
+
+Every model-influenced query — the MCP's and every stored panel's — runs as
+`streamlens_reader`, which holds `SELECT` on `landing` and `youtube` and
+nothing else, under `readonly = 2`. Dashboards and proposals are read and
+written by `default` through typed helpers the model never supplies SQL for.
 
 The browser never sends SQL. It names a query from
 [`api/queries.py`](backend/streamlens/api/queries.py) and passes typed
@@ -119,6 +163,10 @@ uv run uvicorn streamlens.api:app --port 8000
 
 # 3. web
 cd web && npm install && npm run dev   # http://localhost:3000
+
+# optional: three worked proposals, with charts adopted from live dashboards
+cd backend && uv run python scripts/seed_proposal.py           # rows only
+cd backend && uv run python scripts/seed_proposal.py --stills  # + generated stills
 ```
 
 `GET /health` confirms the ClickHouse connection. `GET /api/queries` lists every

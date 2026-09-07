@@ -56,7 +56,7 @@ export function DashboardView({ dashboardId }: { dashboardId: string }) {
   if (error) return <p className="canvas-error">{error}</p>;
   if (!dashboard) return <p className="canvas-waiting">Loading dashboard…</p>;
 
-  // Widths are the curator's sense of what matters, not a literal span;
+  // Widths are the analyst's sense of what matters, not a literal span;
   // the grid decides the rest.
   const panels = packRows(dashboard.panels);
   const open = panels.find((p) => p.id === expanded);
@@ -78,6 +78,7 @@ export function DashboardView({ dashboardId }: { dashboardId: string }) {
         <PanelCard
           key={open.id}
           panel={open}
+          dataUrl={`/api/dashboards/${dashboardId}/panels/${open.id}`}
           expanded
           onToggle={() => toggle(open.id)}
           reloadKey={revision}
@@ -88,6 +89,7 @@ export function DashboardView({ dashboardId }: { dashboardId: string }) {
             <PanelCard
               key={panel.id}
               panel={panel}
+              dataUrl={`/api/dashboards/${dashboardId}/panels/${panel.id}`}
               expanded={false}
               onToggle={() => toggle(panel.id)}
               reloadKey={revision}

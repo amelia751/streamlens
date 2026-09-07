@@ -7,6 +7,10 @@ import {
   type DashboardSummary,
   type Warehouse,
 } from "@/lib/api";
+import {
+  fetchProposalsFromBackend,
+  type ProposalSummary,
+} from "@/lib/proposals";
 
 export default async function StudioLayout({
   children,
@@ -15,6 +19,7 @@ export default async function StudioLayout({
 }) {
   let warehouse: Warehouse | null = null;
   let dashboards: DashboardSummary[] = [];
+  let proposals: ProposalSummary[] = [];
   let error: string | undefined;
   try {
     warehouse = await fetchWarehouse();
@@ -26,6 +31,11 @@ export default async function StudioLayout({
   } catch {
     dashboards = [];
   }
+  try {
+    proposals = await fetchProposalsFromBackend();
+  } catch {
+    proposals = [];
+  }
 
   return (
     <Workspace>
@@ -33,6 +43,7 @@ export default async function StudioLayout({
         <Sidebar
           warehouse={warehouse}
           dashboards={dashboards}
+          proposals={proposals}
           error={error}
         />
         <main className="studio-main">{children}</main>

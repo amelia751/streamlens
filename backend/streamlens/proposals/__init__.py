@@ -1,0 +1,56 @@
+"""Agent-authored theme proposals: the document, its charts, its stills."""
+
+from streamlens.proposals.spec import (
+    Archetype,
+    GENRES,
+    ProposalDoc,
+    ProposalSpecError,
+    parse_doc,
+    validate_doc,
+)
+from streamlens.proposals.stills import generate_still, read_still
+from streamlens.proposals.store import (
+    Proposal,
+    ProposalError,
+    ProposalPanel,
+    Still,
+    add_proposal_panel,
+    adopt_panel,
+    create_proposal,
+    delete_proposal,
+    delete_proposal_panel,
+    ensure_schema,
+    get_proposal,
+    get_proposal_panel,
+    list_proposals,
+    run_proposal_panel,
+    update_proposal,
+    update_proposal_panel,
+)
+
+__all__ = [
+    "Archetype",
+    "GENRES",
+    "Proposal",
+    "ProposalDoc",
+    "ProposalError",
+    "ProposalPanel",
+    "ProposalSpecError",
+    "Still",
+    "add_proposal_panel",
+    "adopt_panel",
+    "create_proposal",
+    "delete_proposal",
+    "delete_proposal_panel",
+    "ensure_schema",
+    "generate_still",
+    "get_proposal",
+    "get_proposal_panel",
+    "list_proposals",
+    "parse_doc",
+    "read_still",
+    "run_proposal_panel",
+    "update_proposal",
+    "update_proposal_panel",
+    "validate_doc",
+]

@@ -1,3 +1,15 @@
-from streamlens.agents.analyst.agent import root_agent
+from streamlens.agents.analyst.agent import (
+    analyst_instruction,
+    authoring_enabled,
+    build_agent,
+    build_toolsets,
+    root_agent,
+)
 
-__all__ = ["root_agent"]
+__all__ = [
+    "analyst_instruction",
+    "authoring_enabled",
+    "build_agent",
+    "build_toolsets",
+    "root_agent",
+]

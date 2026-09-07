@@ -36,6 +36,7 @@ export default function GalleryPreview() {
           <div className="dash-grid" style={{ height: "100%" }}>
             <PanelCard
               panel={{ ...panel, width: 12, height: 1 }}
+              dataUrl={`/api/dashboards/chart-gallery/panels/${panel.id}`}
               expanded={false}
               onToggle={() => undefined}
               reloadKey={0}

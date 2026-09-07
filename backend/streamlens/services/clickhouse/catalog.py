@@ -167,7 +167,7 @@ _STORE_DATABASES = frozenset({"streamlens"})
 def read_schema_brief() -> dict:
     """One compact look at every data table: columns, types, row counts.
 
-    Built for the curator. `list_databases` + `list_tables` dumps CREATE
+    Built for the analyst. `list_databases` + `list_tables` dumps CREATE
     TABLE statements and walks empty/system databases; this skips those and
     returns only what the model needs to write a SELECT.
     """

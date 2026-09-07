@@ -6,8 +6,11 @@ query — connects as `streamlens_reader`. That user is granted SELECT and
 nothing else, so a write is refused by the server itself rather than by an
 application check that a future code path could forget to make.
 
-Dashboard definitions are written by `default` through the typed helpers in
-`streamlens.dashboards.store`, where the model never supplies the SQL.
+Dashboard and proposal definitions are written by `default` through the
+typed helpers in `streamlens.dashboards.store` and
+`streamlens.proposals.store`, where the model never supplies the SQL. They
+are read back by `default` too, so the reader is not granted `streamlens`
+at all — see READABLE below.
 
     uv run --directory backend python ../scripts/clickhouse/create_reader.py
 
@@ -33,7 +36,15 @@ READER = "streamlens_reader"
 PROFILE = "streamlens_reader_profile"
 
 # The databases the agent is allowed to read in full.
-READABLE = ("landing", "youtube", "streamlens")
+#
+# `streamlens` is deliberately absent. It holds dashboard and proposal
+# definitions rather than data, every path that reads or writes them
+# connects as `default` through `shared_client()`, and `run_panel_query` —
+# the one thing the reader is for — needs nothing from it. Granting it
+# would only let a model-authored panel query read the agent's own output
+# back, which is pointless rather than dangerous, but the smaller grant is
+# free.
+READABLE = ("landing", "youtube")
 
 # `system` is granted table by table, not wholesale. Cloud refuses a blanket
 # GRANT SELECT ON system.* because `default` does not hold every system table

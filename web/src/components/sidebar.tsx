@@ -259,12 +259,14 @@ function Kebab() {
 
 function ConfirmDelete({
   title,
+  note,
   busy,
   error,
   onCancel,
   onConfirm,
 }: {
   title: string;
+  note: string;
   busy: boolean;
   error?: string;
   onCancel: () => void;
@@ -292,7 +294,7 @@ function ConfirmDelete({
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id="confirm-title">Delete “{title}”?</h2>
-        <p>This removes the dashboard and its panels. It cannot be undone.</p>
+        <p>{note} It cannot be undone.</p>
         {error && <p className="confirm-error">{error}</p>}
         <div className="confirm-actions">
           <button
@@ -318,16 +320,22 @@ function ConfirmDelete({
   );
 }
 
-function DashboardRow({
-  dashboard,
-  onDeleted,
-  onRestore,
+/**
+ * The kebab and its confirmation, shared by every deletable row in the rail.
+ *
+ * `onDelete` owns the request and whatever optimistic update goes with it,
+ * and throws if the row has to come back. This owns the menu, the dialog,
+ * and reporting the failure where the person who asked for it is looking.
+ */
+function RowMenu({
+  title,
+  note,
+  onDelete,
 }: {
-  dashboard: DashboardSummary;
-  onDeleted: (id: string) => void;
-  onRestore: (dashboard: DashboardSummary) => void;
+  title: string;
+  note: string;
+  onDelete: () => Promise<void>;
 }) {
-  const { openDashboard, activeId, closeTab } = useWorkspace();
   const wrap = useRef<HTMLDivElement>(null);
   const sheet = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -335,8 +343,6 @@ function DashboardRow({
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const on = activeId === `dashboard:${dashboard.id}`;
-  const panels = dashboard.panel_count;
 
   useEffect(() => {
     if (!open) return;
@@ -349,23 +355,13 @@ function DashboardRow({
     return () => window.removeEventListener("mousedown", close);
   }, [open]);
 
-  async function remove() {
+  async function run() {
     setBusy(true);
     setError(undefined);
-    // Drop the tab first so in-flight panel queries abort and free the
-    // connection the delete needs. Closing after the request is what made
-    // the canvas sit on a half-dead dashboard while ClickHouse was busy.
-    closeTab(`dashboard:${dashboard.id}`);
     try {
-      const res = await fetch(`/api/dashboards/${dashboard.id}`, {
-        method: "DELETE",
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error(await res.text());
-      onDeleted(dashboard.id);
+      await onDelete();
       setConfirm(false);
     } catch (e) {
-      onRestore(dashboard);
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
@@ -373,30 +369,19 @@ function DashboardRow({
   }
 
   return (
-    <li className={`rail-dash-row${on ? " on" : ""}`}>
-      <button
-        type="button"
-        className={`rail-dash${on ? " on" : ""}`}
-        onClick={() => openDashboard(dashboard.id, dashboard.title)}
-        title={dashboard.description || dashboard.title}
-      >
-        <span className="rail-dash-title">{dashboard.title}</span>
-        {panels > 0 && (
-          <span className="rail-badge" aria-label={`${panels} panels`}>
-            {panels}
-          </span>
-        )}
-      </button>
+    <>
       <div className="rail-kebab-wrap" ref={wrap}>
         <button
           type="button"
           className={`rail-kebab${open ? " on" : ""}`}
           aria-haspopup="menu"
           aria-expanded={open}
-          aria-label={`Actions for ${dashboard.title}`}
+          aria-label={`Actions for ${title}`}
           onClick={(e) => {
             e.stopPropagation();
-            const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+            const rect = (
+              e.currentTarget as HTMLButtonElement
+            ).getBoundingClientRect();
             setMenuPos({
               top: rect.bottom + 4,
               right: window.innerWidth - rect.right,
@@ -431,7 +416,8 @@ function DashboardRow({
       </div>
       {confirm && (
         <ConfirmDelete
-          title={dashboard.title}
+          title={title}
+          note={note}
           busy={busy}
           error={error}
           onCancel={() => {
@@ -439,36 +425,147 @@ function DashboardRow({
             setConfirm(false);
             setError(undefined);
           }}
-          onConfirm={remove}
+          onConfirm={run}
         />
       )}
+    </>
+  );
+}
+
+function DashboardRow({
+  dashboard,
+  onDeleted,
+  onRestore,
+}: {
+  dashboard: DashboardSummary;
+  onDeleted: (id: string) => void;
+  onRestore: (dashboard: DashboardSummary) => void;
+}) {
+  const { openDashboard, activeId, closeTab } = useWorkspace();
+  const on = activeId === `dashboard:${dashboard.id}`;
+  const panels = dashboard.panel_count;
+
+  async function remove() {
+    // Drop the tab first so in-flight panel queries abort and free the
+    // connection the delete needs. Closing after the request is what made
+    // the canvas sit on a half-dead dashboard while ClickHouse was busy.
+    closeTab(`dashboard:${dashboard.id}`);
+    try {
+      const res = await fetch(`/api/dashboards/${dashboard.id}`, {
+        method: "DELETE",
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(await res.text());
+      onDeleted(dashboard.id);
+    } catch (e) {
+      onRestore(dashboard);
+      throw e;
+    }
+  }
+
+  return (
+    <li className={`rail-dash-row${on ? " on" : ""}`}>
+      <button
+        type="button"
+        className={`rail-dash${on ? " on" : ""}`}
+        onClick={() => openDashboard(dashboard.id, dashboard.title)}
+        title={dashboard.description || dashboard.title}
+      >
+        <span className="rail-dash-title">{dashboard.title}</span>
+        {panels > 0 && (
+          <span className="rail-badge" aria-label={`${panels} panels`}>
+            {panels}
+          </span>
+        )}
+      </button>
+      <RowMenu
+        title={dashboard.title}
+        note="This removes the dashboard and its panels."
+        onDelete={remove}
+      />
     </li>
   );
 }
 
-function useProposals(): ProposalSummary[] {
-  const [proposals, setProposals] = useState<ProposalSummary[]>([]);
+/**
+ * Seeded from the server, then refetched whenever a turn changes something,
+ * so a proposal the analyst has just written appears without a reload.
+ */
+function useProposals(initial: ProposalSummary[]): {
+  proposals: ProposalSummary[];
+  drop: (id: string) => void;
+  restore: (proposal: ProposalSummary) => void;
+} {
+  const { revision } = useWorkspace();
+  const [proposals, setProposals] = useState(initial);
+  const gone = useRef(new Set<string>());
+
+  useEffect(() => {
+    setProposals(initial.filter((p) => !gone.current.has(p.id)));
+  }, [initial]);
 
   useEffect(() => {
     let dropped = false;
-    fetch("/api/mock/proposals")
+    fetch("/api/proposals")
       .then((res) => (res.ok ? res.json() : null))
       .then((body) => {
         if (dropped || !body) return;
-        setProposals(body.proposals ?? []);
+        setProposals(
+          (body.proposals ?? []).filter(
+            (p: ProposalSummary) => !gone.current.has(p.id),
+          ),
+        );
       })
       .catch(() => undefined);
     return () => {
       dropped = true;
     };
-  }, []);
+  }, [revision]);
 
-  return proposals;
+  return {
+    proposals,
+    drop: (id: string) => {
+      gone.current.add(id);
+      setProposals((list) => list.filter((p) => p.id !== id));
+    },
+    restore: (proposal: ProposalSummary) => {
+      gone.current.delete(proposal.id);
+      setProposals((list) =>
+        list.some((p) => p.id === proposal.id) ? list : [proposal, ...list],
+      );
+    },
+  };
 }
 
-function ProposalRow({ proposal }: { proposal: ProposalSummary }) {
-  const { openProposal, activeId } = useWorkspace();
+function ProposalRow({
+  proposal,
+  onDeleted,
+  onRestore,
+}: {
+  proposal: ProposalSummary;
+  onDeleted: (id: string) => void;
+  onRestore: (proposal: ProposalSummary) => void;
+}) {
+  const { openProposal, activeId, closeTab } = useWorkspace();
   const on = activeId === `proposal:${proposal.id}`;
+
+  async function remove() {
+    // Same order as a dashboard: close the tab before the request, so the
+    // panel queries the report has in flight abort rather than holding a
+    // connection the delete is waiting on.
+    closeTab(`proposal:${proposal.id}`);
+    try {
+      const res = await fetch(`/api/proposals/${proposal.id}`, {
+        method: "DELETE",
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(await res.text());
+      onDeleted(proposal.id);
+    } catch (e) {
+      onRestore(proposal);
+      throw e;
+    }
+  }
 
   return (
     <li className={`rail-dash-row${on ? " on" : ""}`}>
@@ -476,16 +573,29 @@ function ProposalRow({ proposal }: { proposal: ProposalSummary }) {
         type="button"
         className={`rail-dash${on ? " on" : ""}`}
         onClick={() => openProposal(proposal.id, proposal.title)}
-        title={proposal.kicker}
+        title={proposal.kicker || proposal.title}
       >
         <span className="rail-dash-title">{proposal.title}</span>
         <span className="rail-badge">{proposal.genre}</span>
       </button>
+      <RowMenu
+        title={proposal.title}
+        note="This removes the proposal, its charts and its stills."
+        onDelete={remove}
+      />
     </li>
   );
 }
 
-function ProposalList({ proposals }: { proposals: ProposalSummary[] }) {
+function ProposalList({
+  proposals,
+  onDeleted,
+  onRestore,
+}: {
+  proposals: ProposalSummary[];
+  onDeleted: (id: string) => void;
+  onRestore: (proposal: ProposalSummary) => void;
+}) {
   if (proposals.length === 0) {
     return <p className="rail-empty">Ask the analyst for a theme.</p>;
   }
@@ -493,7 +603,12 @@ function ProposalList({ proposals }: { proposals: ProposalSummary[] }) {
   return (
     <ul className="rail-dashes">
       {proposals.map((proposal) => (
-        <ProposalRow key={proposal.id} proposal={proposal} />
+        <ProposalRow
+          key={proposal.id}
+          proposal={proposal}
+          onDeleted={onDeleted}
+          onRestore={onRestore}
+        />
       ))}
     </ul>
   );
@@ -529,14 +644,20 @@ function DashboardList({
 export function Sidebar({
   warehouse,
   dashboards: initialDashboards,
+  proposals: initialProposals,
   error,
 }: {
   warehouse: Warehouse | null;
   dashboards: DashboardSummary[];
+  proposals: ProposalSummary[];
   error?: string;
 }) {
   const { dashboards, drop, restore } = useDashboards(initialDashboards);
-  const proposals = useProposals();
+  const {
+    proposals,
+    drop: dropProposal,
+    restore: restoreProposal,
+  } = useProposals(initialProposals);
 
   return (
     <aside className="rail">
@@ -565,7 +686,11 @@ export function Sidebar({
         <section className="rail-pane is-proposals">
           <h2 className="rail-label">Proposals</h2>
           <div className="rail-pane-body">
-            <ProposalList proposals={proposals} />
+            <ProposalList
+              proposals={proposals}
+              onDeleted={dropProposal}
+              onRestore={restoreProposal}
+            />
           </div>
         </section>
 

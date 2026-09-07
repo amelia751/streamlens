@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { BACKEND_URL } from "@/lib/api";
 
 /**
- * One turn with the curator, passed straight through as server-sent events.
+ * One turn with the analyst, passed straight through as server-sent events.
  *
  * The body is streamed rather than awaited: a turn can run for a minute
  * while the agent explores the schema, and the point of the activity lines

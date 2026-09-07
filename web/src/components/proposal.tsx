@@ -3,63 +3,161 @@
 /**
  * A theme proposal on the canvas: a one-sheet, not a dashboard.
  *
- * Fetches `/api/mock/proposals/:id`. Marketplace panels come from the
- * live dashboard the proposal cites. Swap the mock prefix when a real
- * store lands.
+ * The charts under "The marketplace" are the proposal's own — copies of
+ * panel definitions, fetched with the document and replayed from
+ * `/api/proposals/:id/panels/:panelId`. Nothing here fetches the dashboard
+ * a chart was adopted from, which is exactly why deleting that dashboard
+ * cannot collapse this report.
+ *
+ * Provenance is the one place the dashboard is mentioned, and it is a
+ * label. It becomes a link only when that dashboard happens to still
+ * exist, and quietly stops being one when it does not.
  */
 
 import { useEffect, useState } from "react";
 
-import type { Dashboard } from "@/lib/api";
 import { packRows } from "@/lib/layout";
+import type { DashboardSummary } from "@/lib/api";
 import type { Proposal } from "@/lib/proposals";
 import { PanelCard } from "@/components/panel";
 import { useWorkspace } from "@/components/workspace";
 
+/**
+ * The genre colours the whole page, so the vocabulary here has to match
+ * the closed set validated in `proposals/spec.py`. Anything unrecognised
+ * lands on purple rather than on nothing.
+ */
 function toneFor(genre: string): string {
-  if (genre === "Comedy") return "green";
-  if (genre === "Drama") return "blue";
-  return "purple";
+  switch (genre) {
+    case "Comedy":
+    case "Family":
+      return "green";
+    case "Drama":
+    case "Romance":
+      return "blue";
+    case "Documentary":
+    case "Animation":
+      return "teal";
+    case "Action":
+    case "Crime":
+      return "yellow";
+    default:
+      return "purple";
+  }
 }
 
-function MarketPanels({ dashboardId }: { dashboardId: string }) {
-  const { revision } = useWorkspace();
-  const [dashboard, setDashboard] = useState<Dashboard>();
-  const [error, setError] = useState<string>();
+/**
+ * Whether the dashboard a proposal cites is still there.
+ *
+ * Deliberately the *list* route, not the dashboard itself: this decides
+ * whether to render a link, and nothing about the report depends on the
+ * answer. A failed fetch means no link, never an error.
+ */
+function useDashboardLives(dashboardId: string): boolean {
+  const [lives, setLives] = useState(false);
 
   useEffect(() => {
-    const ac = new AbortController();
-    setDashboard(undefined);
-    setError(undefined);
-    fetch(`/api/dashboards/${dashboardId}`, { signal: ac.signal })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(await res.text());
-        return res.json() as Promise<Dashboard>;
+    if (!dashboardId) return;
+    let dropped = false;
+    fetch("/api/dashboards")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (dropped || !body) return;
+        setLives(
+          (body.dashboards ?? []).some(
+            (d: DashboardSummary) => d.id === dashboardId,
+          ),
+        );
       })
-      .then(setDashboard)
-      .catch((e: unknown) => {
-        if (ac.signal.aborted) return;
-        setError(String(e));
-      });
-    return () => ac.abort();
-  }, [dashboardId, revision]);
+      .catch(() => undefined);
+    return () => {
+      dropped = true;
+    };
+  }, [dashboardId]);
 
-  if (error) return <p className="report-market-wait">{error}</p>;
-  if (!dashboard) {
-    return <p className="report-market-wait">Loading warehouse charts…</p>;
-  }
-  if (dashboard.panels.length === 0) {
-    return <p className="report-market-wait">No panels on this dashboard yet.</p>;
+  return lives;
+}
+
+function Provenance({ proposal }: { proposal: Proposal }) {
+  const { openDashboard } = useWorkspace();
+  const lives = useDashboardLives(proposal.source_dashboard_id);
+  const title = proposal.source_dashboard_title;
+
+  if (!title) return null;
+
+  return (
+    <p className="report-provenance">
+      Adapted from{" "}
+      {lives ? (
+        <button
+          type="button"
+          onClick={() =>
+            openDashboard(proposal.source_dashboard_id, title)
+          }
+        >
+          {title}
+        </button>
+      ) : (
+        <span>{title}</span>
+      )}
+      . The queries are this proposal&rsquo;s own copies, replayed live.
+    </p>
+  );
+}
+
+function MarketPanels({ proposal }: { proposal: Proposal }) {
+  const { revision } = useWorkspace();
+
+  if (proposal.panels.length === 0) {
+    return (
+      <p className="report-market-wait">
+        No chart on this proposal yet — the argument above is still an idea.
+      </p>
+    );
   }
 
-  const panels = packRows(dashboard.panels);
+  const panels = packRows(proposal.panels);
 
   return (
     <div className="report-market-grid">
       {panels.map((panel) => (
-        <PanelCard key={panel.id} panel={panel} reloadKey={revision} />
+        <PanelCard
+          key={panel.id}
+          panel={panel}
+          dataUrl={`/api/proposals/${proposal.id}/panels/${panel.id}`}
+          reloadKey={revision}
+        />
       ))}
     </div>
+  );
+}
+
+/**
+ * The still, or the tone gradient standing in for it.
+ *
+ * Image generation can be blocked or simply never run, and a still row can
+ * outlive its object. All three cases land here as the same thing: a
+ * coloured field, never a broken `<img>`.
+ */
+function Hero({ proposal }: { proposal: Proposal }) {
+  // Which URL failed, rather than a boolean — so switching proposals clears
+  // the failure by comparison instead of by an effect that resets it.
+  const [brokenUrl, setBrokenUrl] = useState<string>();
+  const url = proposal.still_url;
+  const broken = url !== null && brokenUrl === url;
+
+  return (
+    <header className={`report-hero${!url || broken ? " is-blank" : ""}`}>
+      {url && !broken && (
+        <img src={url} alt="" onError={() => setBrokenUrl(url)} />
+      )}
+      <div className="report-hero-veil" />
+      <div className="report-hero-copy">
+        <p className="report-kicker">Theme proposal</p>
+        <h2>{proposal.title}</h2>
+        <p className="report-hook">{proposal.hook}</p>
+      </div>
+    </header>
   );
 }
 
@@ -71,7 +169,7 @@ export function ProposalView({ proposalId }: { proposalId: string }) {
     const ac = new AbortController();
     setProposal(undefined);
     setError(undefined);
-    fetch(`/api/mock/proposals/${proposalId}`, { signal: ac.signal })
+    fetch(`/api/proposals/${proposalId}`, { signal: ac.signal })
       .then(async (res) => {
         if (!res.ok) throw new Error(await res.text());
         return res.json() as Promise<Proposal>;
@@ -96,15 +194,7 @@ export function ProposalView({ proposalId }: { proposalId: string }) {
 
   return (
     <article className={`report tone-${toneFor(proposal.genre)}`}>
-      <header className="report-hero">
-        <img src={proposal.still} alt="" />
-        <div className="report-hero-veil" />
-        <div className="report-hero-copy">
-          <p className="report-kicker">Theme proposal</p>
-          <h2>{proposal.title}</h2>
-          <p className="report-hook">{proposal.hook}</p>
-        </div>
-      </header>
+      <Hero proposal={proposal} />
 
       <div className="report-slate">
         <span>{proposal.genre}</span>
@@ -151,8 +241,19 @@ export function ProposalView({ proposalId }: { proposalId: string }) {
       <section className="report-market">
         <h3>The marketplace</h3>
         <p>{proposal.market}</p>
-        <MarketPanels dashboardId={proposal.dashboard_id} />
+        <Provenance proposal={proposal} />
+        <MarketPanels proposal={proposal} />
       </section>
+
+      <footer className="report-foot">
+        <span>Figures computed by Streamlens from the warehouse, live.</span>
+        {proposal.stills.length > 0 && (
+          <span>
+            Still generated with {proposal.stills[0].model}; carries a SynthID
+            watermark.
+          </span>
+        )}
+      </footer>
     </article>
   );
 }

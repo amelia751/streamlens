@@ -127,15 +127,27 @@ export type PanelSpec = {
   format: ValueFormat;
 };
 
-export type Panel = {
-  dashboard_id: string;
+/**
+ * Everything the renderer needs to draw a panel, and nothing about who
+ * owns it.
+ *
+ * A dashboard panel and a proposal's own copy of one are stored in
+ * different tables and fetched from different routes, but they draw
+ * identically. `PanelCard` takes this and a URL to pull rows from, so
+ * there is one renderer rather than one per owner.
+ */
+export type PanelView = {
   id: string;
   title: string;
-  query: string;
   spec: PanelSpec;
-  position: number;
   width: number;
   height: number;
+};
+
+export type Panel = PanelView & {
+  dashboard_id: string;
+  query: string;
+  position: number;
 };
 
 export type Dashboard = {
@@ -153,7 +165,7 @@ export type DashboardSummary = {
 };
 
 export type PanelData = {
-  panel: Panel;
+  panel: PanelView;
   columns: string[];
   types: string[];
   rows: unknown[][];

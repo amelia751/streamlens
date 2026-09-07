@@ -48,7 +48,7 @@ async function* sseEvents(body: ReadableStream<Uint8Array>) {
 }
 
 export function Chat() {
-  const { touchDashboard } = useWorkspace();
+  const { touchDashboard, touchProposal } = useWorkspace();
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [activity, setActivity] = useState<string>();
@@ -105,6 +105,8 @@ export function Chat() {
             });
           } else if (event.type === "canvas") {
             touchDashboard(event.dashboard_id);
+          } else if (event.type === "proposal") {
+            touchProposal(event.proposal_id);
           } else if (event.type === "text") {
             setMessages((m) => [...m, { role: "agent", text: event.text }]);
           } else if (event.type === "error") {
@@ -121,7 +123,7 @@ export function Chat() {
         setBusy(false);
       }
     },
-    [busy, touchDashboard],
+    [busy, touchDashboard, touchProposal],
   );
 
   if (!open) {

@@ -1,18 +1,23 @@
 /**
  * Fitting panels to the twelve-column grid.
  *
- * The curator picks a width per panel, but nothing makes those widths add
+ * The analyst picks a width per panel, but nothing makes those widths add
  * up to a row. A dashboard of 12, 3, 6, 6 leaves the third panel wrapping
  * with a three-column hole beside it, because CSS grid will not backfill a
  * gap it cannot reorder into.
  *
  * So the stored width is read as a hint at relative importance rather than
- * an exact span: panels are grouped into rows in the order the curator
+ * an exact span: panels are grouped into rows in the order the analyst
  * chose, and each row is then scaled to fill exactly twelve columns.
  * Nothing moves, and no row ends short.
  */
 
-import type { Panel } from "@/lib/api";
+/**
+ * Nothing here reads anything but `width`, and every panel is returned as
+ * itself with at most that one field replaced — so this is generic over
+ * whatever kind of panel it is handed. A dashboard's and a proposal's own
+ * copies pack the same way.
+ */
 
 const COLUMNS = 12;
 
@@ -40,11 +45,11 @@ function sum(values: number[]): number {
  * Panels are returned flat because the grid places them itself; the rows
  * here only exist to decide how the columns get shared out.
  */
-export function packRows(panels: Panel[]): Panel[] {
+export function packRows<T extends { width: number }>(panels: T[]): T[] {
   if (panels.length === 0) return panels;
 
-  const rows: Panel[][] = [];
-  let row: Panel[] = [];
+  const rows: T[][] = [];
+  let row: T[] = [];
   let width = 0;
 
   for (const panel of panels) {
@@ -77,7 +82,7 @@ export function packRows(panels: Panel[]): Panel[] {
 }
 
 /** One row's widths, scaled to land on exactly twelve columns. */
-function fit(row: Panel[]): Panel[] {
+function fit<T extends { width: number }>(row: T[]): T[] {
   const hints = row.map((p) => hint(p.width));
   const total = sum(hints);
   const exact = hints.map((w) => (w * COLUMNS) / total);
@@ -97,7 +102,7 @@ function fit(row: Panel[]): Panel[] {
 
   // A panel rounded below the floor borrows from the widest one, which can
   // afford it. Where several are equally wide the last gives way, since the
-  // curator ordered the row and put the panel it cared about first.
+  // analyst ordered the row and put the panel it cared about first.
   for (let i = 0; i < width.length; i += 1) {
     while (width[i] < MIN_WIDTH) {
       const widest = width.lastIndexOf(Math.max(...width));

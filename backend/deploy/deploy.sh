@@ -2,7 +2,7 @@
 # Deploy both halves of the Streamlens backend.
 #
 #   ./deploy/deploy.sh mcp      # ClickHouse MCP server -> Cloud Run
-#   ./deploy/deploy.sh agent    # analyst agent -> Agent Runtime
+#   ./deploy/deploy.sh agent    # analyst agent -> Agent Runtime (read-only)
 #   ./deploy/deploy.sh secrets  # push ClickHouse creds to Secret Manager
 #
 # Run from the backend/ directory. Requires the owner key described in
@@ -53,6 +53,12 @@ mcp)
   ;;
 
 agent)
+  # The same agent the Studio chat runs, but deployed without warehouse
+  # credentials: it reaches ClickHouse through the IAM-gated Cloud Run MCP,
+  # which holds them itself. `agents/analyst.authoring_enabled()` sees that
+  # and attaches neither the dashboard nor the proposal server, so the
+  # deployed agent reads and does not write — and its instruction never
+  # offers a tool it does not have.
   cd "$BACKEND"
   # The temp folder must sit outside the package tree: ADK copies
   # --extra_packages into it, and a temp folder inside streamlens/ makes

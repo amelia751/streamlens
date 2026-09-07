@@ -44,6 +44,16 @@ def _as_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _as_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
 @dataclass(frozen=True)
 class GoogleCloudSettings:
     project: str
@@ -80,6 +90,36 @@ class GoogleCloudSettings:
             "project": self.project,
             "location": self.model_location,
         }
+
+
+@dataclass(frozen=True)
+class ProposalSettings:
+    """Where a proposal's generated stills live, and how big they may get.
+
+    The bucket is deliberately not `streamlens-data`: `raw/` in that bucket
+    is the immutable lake ClickPipes reads from, and a model-driven write
+    path must not share an IAM boundary with it.
+    """
+
+    bucket: str
+    image_model: str
+    image_location: str
+    max_stills_per_proposal: int
+    max_still_bytes: int
+
+
+def proposal_settings() -> ProposalSettings:
+    return ProposalSettings(
+        bucket=os.environ.get("STREAMLENS_PROPOSAL_BUCKET", "streamlens-proposals"),
+        # Nano Banana Pro. Like gemini-3.8-flash it is served only from the
+        # global endpoint.
+        image_model=os.environ.get("STREAMLENS_IMAGE_MODEL", "gemini-3-pro-image"),
+        image_location=os.environ.get("STREAMLENS_IMAGE_LOCATION", "global"),
+        max_stills_per_proposal=_as_int("STREAMLENS_MAX_STILLS", 3),
+        # A Nano Banana Pro PNG measures ~1.7 MB. Twelve is headroom, not a
+        # target; anything larger is a bug rather than an image.
+        max_still_bytes=_as_int("STREAMLENS_MAX_STILL_BYTES", 12 * 1024 * 1024),
+    )
 
 
 @dataclass(frozen=True)

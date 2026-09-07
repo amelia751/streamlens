@@ -25,6 +25,9 @@ data/**/_tmp*/
 .env
 .env.*
 
+# Hackathon writeup (local only)
+submission/
+
 # App
 node_modules/
 .next/
