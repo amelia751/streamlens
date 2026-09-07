@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist_Mono, Inter } from "next/font/google";
+import { Fraunces, Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 
 import { SiteNav } from "@/components/nav";
@@ -7,6 +7,11 @@ import { TitleDialogProvider } from "@/components/title-link";
 
 const inter = Inter({
   variable: "--font-inter",
+  subsets: ["latin"],
+});
+
+const display = Fraunces({
+  variable: "--font-display",
   subsets: ["latin"],
 });
 
@@ -32,7 +37,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${mono.variable} h-full bg-white antialiased`}
+      className={`${inter.variable} ${display.variable} ${mono.variable} h-full bg-white antialiased`}
     >
       <body className="min-h-full bg-white">
         <TitleDialogProvider>

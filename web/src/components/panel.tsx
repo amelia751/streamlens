@@ -243,14 +243,14 @@ function TableBlock({ data }: { data: PanelData }) {
 
 export function PanelCard({
   panel,
-  expanded,
+  expanded = false,
   onToggle,
   reloadKey,
 }: {
   panel: Panel;
-  expanded: boolean;
-  onToggle: () => void;
-  reloadKey: number;
+  expanded?: boolean;
+  onToggle?: () => void;
+  reloadKey?: number;
 }) {
   // One piece of state, so a reload replaces the old rows and the old error
   // together rather than briefly showing both.
@@ -274,7 +274,7 @@ export function PanelCard({
       });
 
     return () => ac.abort();
-  }, [panel.dashboard_id, panel.id, reloadKey]);
+  }, [panel.dashboard_id, panel.id, reloadKey ?? 0]);
 
   const kind = panel.spec.type;
 
@@ -294,15 +294,17 @@ export function PanelCard({
         <h3 className="tile-title" title={panel.title}>
           {panel.title}
         </h3>
-        <button
-          type="button"
-          className="tile-zoom"
-          onClick={onToggle}
-          aria-label={expanded ? "Shrink panel" : "Expand panel"}
-          title={expanded ? "Shrink" : "Expand"}
-        >
-          {expanded ? "⤡" : "⤢"}
-        </button>
+        {onToggle && (
+          <button
+            type="button"
+            className="tile-zoom"
+            onClick={onToggle}
+            aria-label={expanded ? "Shrink panel" : "Expand panel"}
+            title={expanded ? "Shrink" : "Expand"}
+          >
+            {expanded ? "⤡" : "⤢"}
+          </button>
+        )}
       </header>
 
       <div className="tile-body">

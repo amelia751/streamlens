@@ -1,53 +1,65 @@
 "use client";
 
 /**
- * A theme proposal on the canvas: one page, stills, a warehouse chart.
+ * A theme proposal on the canvas: a one-sheet, not a dashboard.
  *
- * Fetches `/api/mock/proposals/:id`. Swap the prefix when a real store lands.
+ * Fetches `/api/mock/proposals/:id`. Marketplace panels come from the
+ * live dashboard the proposal cites. Swap the mock prefix when a real
+ * store lands.
  */
 
 import { useEffect, useState } from "react";
 
-import { compact } from "@/lib/format";
-import type { Proposal, ProposalChart } from "@/lib/proposals";
+import type { Dashboard } from "@/lib/api";
+import { packRows } from "@/lib/layout";
+import type { Proposal } from "@/lib/proposals";
+import { PanelCard } from "@/components/panel";
 import { useWorkspace } from "@/components/workspace";
 
-function chartValue(chart: ProposalChart, value: number): string {
-  if (chart.format === "percent") return `${Math.round(value * 100)}%`;
-  return compact(value);
+function toneFor(genre: string): string {
+  if (genre === "Comedy") return "green";
+  if (genre === "Drama") return "blue";
+  return "purple";
 }
 
-function ProposalBars({ chart }: { chart: ProposalChart }) {
-  const { openDashboard } = useWorkspace();
-  const max = Math.max(...chart.bars.map((bar) => bar.value), 1);
+function MarketPanels({ dashboardId }: { dashboardId: string }) {
+  const { revision } = useWorkspace();
+  const [dashboard, setDashboard] = useState<Dashboard>();
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    const ac = new AbortController();
+    setDashboard(undefined);
+    setError(undefined);
+    fetch(`/api/dashboards/${dashboardId}`, { signal: ac.signal })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(await res.text());
+        return res.json() as Promise<Dashboard>;
+      })
+      .then(setDashboard)
+      .catch((e: unknown) => {
+        if (ac.signal.aborted) return;
+        setError(String(e));
+      });
+    return () => ac.abort();
+  }, [dashboardId, revision]);
+
+  if (error) return <p className="report-market-wait">{error}</p>;
+  if (!dashboard) {
+    return <p className="report-market-wait">Loading warehouse charts…</p>;
+  }
+  if (dashboard.panels.length === 0) {
+    return <p className="report-market-wait">No panels on this dashboard yet.</p>;
+  }
+
+  const panels = packRows(dashboard.panels);
 
   return (
-    <figure className={`report-chart tone-${chart.tone}`}>
-      <figcaption>
-        <button
-          type="button"
-          className="report-chart-dash"
-          onClick={() => openDashboard(chart.dashboard_id, chart.dashboard_title)}
-        >
-          {chart.dashboard_title}
-        </button>
-        <strong>{chart.title}</strong>
-        <span>{chart.caption}</span>
-      </figcaption>
-      <ul>
-        {chart.bars.map((bar) => (
-          <li key={bar.label}>
-            <span className="report-chart-label">{bar.label}</span>
-            <span className="report-chart-track" aria-hidden>
-              <i style={{ width: `${Math.max((bar.value / max) * 100, 4)}%` }} />
-            </span>
-            <span className="report-chart-value">
-              {chartValue(chart, bar.value)}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </figure>
+    <div className="report-market-grid">
+      {panels.map((panel) => (
+        <PanelCard key={panel.id} panel={panel} reloadKey={revision} />
+      ))}
+    </div>
   );
 }
 
@@ -57,6 +69,8 @@ export function ProposalView({ proposalId }: { proposalId: string }) {
 
   useEffect(() => {
     const ac = new AbortController();
+    setProposal(undefined);
+    setError(undefined);
     fetch(`/api/mock/proposals/${proposalId}`, { signal: ac.signal })
       .then(async (res) => {
         if (!res.ok) throw new Error(await res.text());
@@ -71,38 +85,47 @@ export function ProposalView({ proposalId }: { proposalId: string }) {
   }, [proposalId]);
 
   if (error) return <p className="canvas-error">{error}</p>;
-  if (!proposal) return <p className="canvas-waiting">Opening proposal…</p>;
+  if (!proposal) {
+    return (
+      <article className="report is-loading">
+        <div className="report-hero" />
+        <p className="canvas-waiting">Opening proposal…</p>
+      </article>
+    );
+  }
 
   return (
-    <article className="report">
-      <header className="report-banner">
-        <p className="report-kicker">Theme proposal</p>
-        <h2>{proposal.title}</h2>
-        <p>{proposal.hook}</p>
+    <article className={`report tone-${toneFor(proposal.genre)}`}>
+      <header className="report-hero">
+        <img src={proposal.still} alt="" />
+        <div className="report-hero-veil" />
+        <div className="report-hero-copy">
+          <p className="report-kicker">Theme proposal</p>
+          <h2>{proposal.title}</h2>
+          <p className="report-hook">{proposal.hook}</p>
+        </div>
       </header>
 
-      <div className="report-page">
-        <div className="report-col is-copy">
-          <div className="report-strip">
-            <img src={proposal.still} alt="" />
-            <div className="report-strip-meta">
-              <strong>{proposal.title}</strong>
-              <span>Budget — {proposal.budget}</span>
-              <span>Genre — {proposal.genre}</span>
-            </div>
-          </div>
+      <div className="report-slate">
+        <span>{proposal.genre}</span>
+        <span>{proposal.budget}</span>
+        <span>{proposal.kicker}</span>
+      </div>
 
-          <section>
-            <h3>Personal connection</h3>
-            <p>{proposal.connection}</p>
-          </section>
-          <section>
-            <h3>Logline</h3>
-            <p className="report-lead">{proposal.logline}</p>
-          </section>
-          <section>
-            <h3>The characters</h3>
-            <ul className="report-cast">
+      <blockquote className="report-logline">
+        <p>{proposal.logline}</p>
+      </blockquote>
+
+      <section className="report-room">
+        <h3>The room</h3>
+        <p>{proposal.connection}</p>
+      </section>
+
+      <div className="report-grid">
+        <section className="report-pane">
+          <h3>The characters</h3>
+          <div className="report-pane-body">
+            <ul className="report-entries">
               {proposal.archetypes.map((person) => (
                 <li key={person.name}>
                   <strong>{person.name}</strong>
@@ -110,38 +133,26 @@ export function ProposalView({ proposalId }: { proposalId: string }) {
                 </li>
               ))}
             </ul>
-          </section>
-          <section>
-            <h3>Where we meet them</h3>
-            <p>{proposal.meet}</p>
-          </section>
-        </div>
-
-        <div className="report-col is-beats">
-          <section>
-            <h3>Story</h3>
-            <ol className="report-beats">
-              {proposal.beats.map((beat) => (
-                <li key={beat.label}>
-                  <strong>{beat.label}</strong>
-                  <p>{beat.text}</p>
-                </li>
+          </div>
+        </section>
+        <section className="report-pane">
+          <h3>Story</h3>
+          <div className="report-pane-body report-story">
+            {proposal.story
+              .split(/\n\n+/)
+              .filter(Boolean)
+              .map((para) => (
+                <p key={para.slice(0, 24)}>{para}</p>
               ))}
-            </ol>
-          </section>
-          <section>
-            <h3>Where we leave them</h3>
-            <p>{proposal.leave}</p>
-          </section>
-          <section>
-            <h3>The marketplace</h3>
-            <p>{proposal.market}</p>
-            {proposal.charts.map((chart) => (
-              <ProposalBars key={chart.title} chart={chart} />
-            ))}
-          </section>
-        </div>
+          </div>
+        </section>
       </div>
+
+      <section className="report-market">
+        <h3>The marketplace</h3>
+        <p>{proposal.market}</p>
+        <MarketPanels dashboardId={proposal.dashboard_id} />
+      </section>
     </article>
   );
 }

@@ -5,29 +5,9 @@
  * prefix for `/api/proposals` when the warehouse starts writing them.
  */
 
-export type ProposalBar = {
-  label: string;
-  value: number;
-};
-
-export type ProposalChart = {
-  title: string;
-  caption: string;
-  dashboard_id: string;
-  dashboard_title: string;
-  format: "compact" | "percent";
-  tone: "yellow" | "green" | "blue" | "purple" | "teal";
-  bars: ProposalBar[];
-};
-
 export type ProposalArchetype = {
   name: string;
   note: string;
-};
-
-export type ProposalBeat = {
-  label: string;
-  text: string;
 };
 
 export type ProposalSummary = {
@@ -47,11 +27,8 @@ export type Proposal = ProposalSummary & {
   connection: string;
   stills: string[];
   archetypes: ProposalArchetype[];
-  meet: string;
-  beats: ProposalBeat[];
-  leave: string;
+  story: string;
   market: string;
-  charts: ProposalChart[];
 };
 
 export type ProposalList = {

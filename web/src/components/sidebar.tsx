@@ -328,8 +328,10 @@ function DashboardRow({
   onRestore: (dashboard: DashboardSummary) => void;
 }) {
   const { openDashboard, activeId, closeTab } = useWorkspace();
-  const menu = useRef<HTMLDivElement>(null);
+  const wrap = useRef<HTMLDivElement>(null);
+  const sheet = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -339,7 +341,9 @@ function DashboardRow({
   useEffect(() => {
     if (!open) return;
     const close = (e: MouseEvent) => {
-      if (!menu.current?.contains(e.target as Node)) setOpen(false);
+      const node = e.target as Node;
+      if (wrap.current?.contains(node) || sheet.current?.contains(node)) return;
+      setOpen(false);
     };
     window.addEventListener("mousedown", close);
     return () => window.removeEventListener("mousedown", close);
@@ -383,7 +387,7 @@ function DashboardRow({
           </span>
         )}
       </button>
-      <div className="rail-kebab-wrap" ref={menu}>
+      <div className="rail-kebab-wrap" ref={wrap}>
         <button
           type="button"
           className={`rail-kebab${open ? " on" : ""}`}
@@ -392,26 +396,38 @@ function DashboardRow({
           aria-label={`Actions for ${dashboard.title}`}
           onClick={(e) => {
             e.stopPropagation();
+            const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+            setMenuPos({
+              top: rect.bottom + 4,
+              right: window.innerWidth - rect.right,
+            });
             setOpen((v) => !v);
           }}
         >
           <Kebab />
         </button>
-        {open && (
-          <div className="rail-menu" role="menu">
-            <button
-              type="button"
-              role="menuitem"
-              className="rail-menu-item is-danger"
-              onClick={() => {
-                setOpen(false);
-                setConfirm(true);
-              }}
+        {open &&
+          createPortal(
+            <div
+              ref={sheet}
+              className="rail-menu"
+              role="menu"
+              style={{ top: menuPos.top, right: menuPos.right }}
             >
-              Delete
-            </button>
-          </div>
-        )}
+              <button
+                type="button"
+                role="menuitem"
+                className="rail-menu-item is-danger"
+                onClick={() => {
+                  setOpen(false);
+                  setConfirm(true);
+                }}
+              >
+                Delete
+              </button>
+            </div>,
+            document.body,
+          )}
       </div>
       {confirm && (
         <ConfirmDelete

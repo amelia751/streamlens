@@ -27,41 +27,15 @@ export const PROPOSALS: Proposal[] = [
       { name: "The uploader", note: "Knows the comments. Does not know the viewer." },
       { name: "The regular", note: "Same three titles. Never subscribed." },
       { name: "The clip", note: "Ninety seconds that should have stayed buried." },
+      { name: "The premiere chat", note: "One handle that never misses a go-live." },
+      { name: "The algorithm", note: "Keeps serving the same three. Will not say why." },
+      { name: "The last video", note: "Not for the feed. A time and a place." },
+      { name: "The roommate", note: "Sleeps through it. The TV does not." },
     ],
-    meet: "A kitchen TV left on. A phone face-down that lights up anyway. The city is empty enough that you can hear the next video autoplay.",
-    beats: [
-      {
-        label: "Where it starts",
-        text: "A channel that only spikes after 1am. No campaign. No premiere. Just a habit.",
-      },
-      {
-        label: "Where it turns",
-        text: "The uploader notices the same anonymous viewer in every premiere chat — and starts leaving messages only that person would understand.",
-      },
-      {
-        label: "Where it lands",
-        text: "The last video is not for the algorithm. It is a meeting time.",
-      },
-    ],
-    leave: "Not a finished plot. A window: late-night catalog, one obsessive viewer, and a creator who can no longer pretend the numbers are anonymous.",
+    story:
+      "A late-night habit, not a plot. Someone keeps the same three titles open after 1am. The person who uploaded them starts to notice that the numbers have a face.\n\nThe theme is anonymity breaking. Not a chase and not a twist — the catalog after midnight as a room two people are already in.\n\nWrite the window, not the ending. The warehouse already proves the hours exist.",
     market:
       "YouTube Overview already shows the after-midnight lift. Pair it with a contained budget and a two-hander. The warehouse is the pitch: this audience exists before a single scene is written.",
-    charts: [
-      {
-        title: "Hours after midnight",
-        caption: "Each bar is a daypart from YouTube Overview. Taller means more hours watched.",
-        dashboard_id: "youtube-overview",
-        dashboard_title: "YouTube Overview",
-        format: "compact",
-        tone: "purple",
-        bars: [
-          { label: "6a–12p", value: 4_100_000 },
-          { label: "12p–6p", value: 6_800_000 },
-          { label: "6p–12a", value: 9_400_000 },
-          { label: "12a–6a", value: 11_200_000 },
-        ],
-      },
-    ],
   },
   {
     id: "ninety-seconds-then-cut",
@@ -82,39 +56,15 @@ export const PROPOSALS: Proposal[] = [
       { name: "The bit", note: "Lives on a phone. Dies if you explain it." },
       { name: "The expander", note: "Keeps adding a second beat until it is a movie." },
       { name: "The original", note: "Posted it first. Does not own it anymore." },
+      { name: "The duet", note: "Steals the cut and makes it travel." },
+      { name: "The comment", note: "Becomes the sequel nobody asked to write." },
+      { name: "The brand", note: "Wants thirty seconds and the same laugh." },
+      { name: "The editor", note: "Cuts it shorter every pass." },
     ],
-    meet: "A train, a lock screen, a laugh that is already over. Nobody in the car is watching the same thing and they all look like they are.",
-    beats: [
-      {
-        label: "Where it starts",
-        text: "One short that travels. No plot yet — just a cut people replay.",
-      },
-      {
-        label: "Where it turns",
-        text: "The longform version exists because the short made a promise it could not keep in a minute.",
-      },
-      {
-        label: "Where it lands",
-        text: "The movie has to earn the last cut the short already gave away.",
-      },
-    ],
-    leave: "A theme, not a script: start in the length that already works, then spend the feature on why that laugh was cheaper than it looked.",
+    story:
+      "Start in the length people already finish. A punchline that works at 0:58 does not need a first act invented for it.\n\nThe feature exists because the short made a promise a minute cannot keep. The theme is expansion: what you owe the laugh once it leaves the phone.\n\nStay general. The cut is the idea. Plot comes later, if it earns the last frame the short already gave away.",
     market:
       "Shorts vs Longform already splits the catalog. A shorts-native comedy does not need to invent the audience — it needs a second act the short cannot hold.",
-    charts: [
-      {
-        title: "Shorts vs longform",
-        caption: "Share of uploads from Shorts vs Longform. Read across, not as a winner.",
-        dashboard_id: "shorts-vs-longform",
-        dashboard_title: "Shorts vs Longform",
-        format: "percent",
-        tone: "green",
-        bars: [
-          { label: "Shorts", value: 0.62 },
-          { label: "Longform", value: 0.38 },
-        ],
-      },
-    ],
   },
   {
     id: "the-home-market",
@@ -135,42 +85,15 @@ export const PROPOSALS: Proposal[] = [
       { name: "The visitor", note: "Has a return flight. The table does not." },
       { name: "The household", note: "Kept her chair. Changed the channel." },
       { name: "The other city", note: "Where the views actually are." },
+      { name: "The empty chair", note: "Set for four. Three sit down." },
+      { name: "The cousin", note: "Streamed it first. Will not translate." },
+      { name: "The producer", note: "Calls that market secondary." },
+      { name: "The remote", note: "The language on it is the argument." },
     ],
-    meet: "A kitchen set for four. Three people. A livestream from a timezone that is already tomorrow.",
-    beats: [
-      {
-        label: "Where it starts",
-        text: "A title that is #1 in a market the producers treat as secondary.",
-      },
-      {
-        label: "Where it turns",
-        text: "The family in the film is watching a different country's version of themselves.",
-      },
-      {
-        label: "Where it lands",
-        text: "Home is the market that kept the hours, not the one on the call sheet.",
-      },
-    ],
-    leave: "Write toward the country that already claimed the story. The warehouse names it before the treatment does.",
+    story:
+      "Write toward the country that already claimed the title, not the one that financed it. The family on screen is watching a different country's version of themselves.\n\nThe theme is recognition. Home is the market that kept the hours, not the city on the call sheet.\n\nDo not lock a plot. Name the kitchen the warehouse already says is watching.",
     market:
       "Network growth is not evenly spread. The chart is the argument: pick the market that is already watching, then write the kitchen that market would recognize.",
-    charts: [
-      {
-        title: "Hours by market",
-        caption: "Each bar is a market from channel activity. Taller means more hours on the network.",
-        dashboard_id: "youtube-channel-activity-network-growth",
-        dashboard_title: "YouTube Channel Activity & Network Growth",
-        format: "compact",
-        tone: "blue",
-        bars: [
-          { label: "PH", value: 2_400_000 },
-          { label: "MX", value: 1_900_000 },
-          { label: "BR", value: 1_600_000 },
-          { label: "US", value: 1_100_000 },
-          { label: "GB", value: 700_000 },
-        ],
-      },
-    ],
   },
 ];
 
