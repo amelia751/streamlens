@@ -173,6 +173,18 @@ a {
   object-fit: contain;
 }
 
+.rail-kind {
+  flex-shrink: 0;
+  width: 0.9rem;
+  height: 0.9rem;
+  color: var(--muted);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.35;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 /* ---------------------------------------------------------- editorial */
 
 .shell {
@@ -562,19 +574,8 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
-/* The ECharts panels reuse the card above, but ECharts renders its tooltip
-   into its own node and writes background, border and padding as inline
-   styles. Overriding them is the only way to reach the same look. */
-.chart-tip.chart-tip {
-  padding: 0.5rem 0.65rem 0.55rem !important;
-  border: 1px solid var(--line) !important;
-  border-radius: 8px !important;
-  background: var(--paper) !important;
-  box-shadow: 0 10px 28px rgb(24 24 27 / 8%) !important;
-  line-height: 1.65;
-  pointer-events: none;
-}
-
+/* The ECharts panels draw their own card and fill it with the same markup,
+   so only the contents are styled here. */
 .chart-tip-row i {
   display: inline-block;
   width: 0.55rem;
@@ -1139,15 +1140,6 @@ a {
   padding: 0 0 0.4rem 1.15rem;
 }
 
-.rail-chip {
-  display: inline-block;
-  margin: 0 0.45rem 0.3rem;
-  padding: 0.1rem 0.4rem;
-  border-radius: 5px;
-  background: var(--tone);
-  color: var(--ink);
-  font-size: 0.6875rem;
-}
 
 .rail-leaf {
   display: flex;

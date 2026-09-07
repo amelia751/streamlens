@@ -21,7 +21,7 @@ from streamlens.services.clickhouse.catalog import (
 from streamlens.services.clickhouse.cloud import list_clickpipes
 
 SOURCE_KIND_LABELS = {
-    "objectStorage": "Object storage",
+    "objectStorage": "ClickPipes",
     "kafka": "Kafka",
     "postgres": "Postgres CDC",
     "mysql": "MySQL CDC",

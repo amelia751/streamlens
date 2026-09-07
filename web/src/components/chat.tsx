@@ -119,15 +119,15 @@ export function Chat() {
         className="chat-reopen"
         onClick={() => setOpen(true)}
       >
-        Curator
+        Analyst
       </button>
     );
   }
 
   return (
-    <aside className="chat" aria-label="Conversation with the curator">
+    <aside className="chat" aria-label="Conversation with the analyst">
       <header className="chat-head">
-        <span className="chat-name">Curator</span>
+        <span className="chat-name">Analyst</span>
         <button
           type="button"
           className="chat-hide"

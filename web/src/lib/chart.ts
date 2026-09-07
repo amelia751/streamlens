@@ -243,15 +243,29 @@ const BASE = {
   stateAnimation: { duration: 180, easing: "cubicOut" as const },
 };
 
-/** A card, matching the tooltips elsewhere in the app. */
+/**
+ * The card ECharts draws around a tooltip, matched to the ones elsewhere in
+ * the app.
+ *
+ * ECharts owns the box and the stylesheet owns what goes inside it. Styling
+ * the box from CSS instead means overriding ECharts' inline styles, and
+ * those overrides also apply while the tooltip is empty and parked at the
+ * bottom of the chart — which paints an empty card on the panel.
+ */
+const CARD = {
+  backgroundColor: PAPER,
+  borderColor: LINE,
+  borderWidth: 1,
+  borderRadius: 8,
+  padding: [8, 10, 9, 10] as [number, number, number, number],
+  extraCssText: "box-shadow: 0 10px 28px rgb(24 24 27 / 8%); max-width: 16rem;",
+  textStyle: { color: INK, fontSize: 12 },
+};
+
 function tooltipCard(format: ValueFormat, scale: number) {
   return {
+    ...CARD,
     trigger: "axis" as const,
-    className: "chart-tip",
-    // ECharts' own chrome is turned off so the stylesheet owns the look.
-    backgroundColor: "transparent",
-    borderWidth: 0,
-    padding: 0,
     // Chasing the cursor exactly is jittery on a dense line.
     transitionDuration: 0.18,
     axisPointer: {
@@ -289,6 +303,72 @@ function tooltipCard(format: ValueFormat, scale: number) {
       return `${head ? `<div class="chart-tip-label">${head}</div>` : ""}${body}`;
     },
   };
+}
+
+/** Roughly a three-column tile. Below this, the defaults start to crowd. */
+const NARROW = 380;
+
+/**
+ * ECharts' own responsive layer.
+ *
+ * A panel can be anything from two columns to the whole canvas, and the
+ * same option is not right across that range. Rather than threading the
+ * tile's width through React and rebuilding on every resize, the chart is
+ * handed both variants and picks one itself whenever it is resized.
+ *
+ * Every key set in one variant is set in the other. ECharts merges these
+ * rather than replacing, so anything mentioned only under the narrow query
+ * would stick when the panel grew back.
+ */
+function cartesianMedia(many: boolean) {
+  return [
+    {
+      query: { maxWidth: NARROW },
+      option: {
+        grid: { top: many ? 24 : 6, left: 2, right: 6 },
+        legend: {
+          itemGap: 8,
+          itemWidth: 8,
+          itemHeight: 8,
+          textStyle: { fontSize: 10 },
+        },
+        xAxis: { axisLabel: { fontSize: 10, margin: 7 } },
+        yAxis: { axisLabel: { fontSize: 10, margin: 7 } },
+      },
+    },
+    {
+      option: {
+        grid: { top: many ? 28 : 10, left: 4, right: 10 },
+        legend: {
+          itemGap: 14,
+          itemWidth: 10,
+          itemHeight: 10,
+          textStyle: { fontSize: 11 },
+        },
+        xAxis: { axisLabel: { fontSize: 11, margin: 10 } },
+        yAxis: { axisLabel: { fontSize: 11, margin: 10 } },
+      },
+    },
+  ];
+}
+
+/** The same idea for a donut, where the ring itself has to give ground. */
+function pieMedia() {
+  return [
+    {
+      query: { maxWidth: NARROW },
+      option: {
+        legend: { itemGap: 8, textStyle: { fontSize: 10 } },
+        series: [{ radius: ["42%", "68%"], center: ["50%", "38%"] }],
+      },
+    },
+    {
+      option: {
+        legend: { itemGap: 14, textStyle: { fontSize: 11 } },
+        series: [{ radius: ["48%", "74%"], center: ["50%", "42%"] }],
+      },
+    },
+  ];
 }
 
 function legend(show: boolean) {
@@ -479,28 +559,31 @@ export function chartOption(frame: Frame, spec: PanelSpec): EChartsOption {
   }
 
   return {
-    ...BASE,
-    grid: { left: 4, right: 10, top: many ? 28 : 10, bottom: 0, containLabel: true },
-    tooltip: {
-      ...tooltipCard(spec.format, 1),
-      trigger: spec.type === "scatter" ? "item" : "axis",
-    },
-    // Several series without a key is just coloured noise, so the legend
-    // stays even on the smallest panel.
-    legend: legend(many),
-    xAxis,
-    yAxis: {
-      type: "value",
-      axisLine: { show: false },
-      axisTick: { show: false },
-      // Horizontal rules only, dashed, so the marks stay the loudest thing.
-      splitLine: { lineStyle: { color: LINE, type: [3, 6] as [number, number] } },
-      axisLabel: {
-        ...axisLabel,
-        formatter: (v: number) => formatValue(v, spec.format),
+    baseOption: {
+      ...BASE,
+      grid: { left: 4, right: 10, bottom: 0, containLabel: true },
+      tooltip: {
+        ...tooltipCard(spec.format, 1),
+        trigger: spec.type === "scatter" ? "item" : "axis",
       },
+      // Several series without a key is just coloured noise, so the legend
+      // stays even on the smallest panel.
+      legend: legend(many),
+      xAxis,
+      yAxis: {
+        type: "value",
+        axisLine: { show: false },
+        axisTick: { show: false },
+        // Horizontal rules only, dashed, so the marks stay the loudest thing.
+        splitLine: { lineStyle: { color: LINE, type: [3, 6] as [number, number] } },
+        axisLabel: {
+          ...axisLabel,
+          formatter: (v: number) => formatValue(v, spec.format),
+        },
+      },
+      series,
     },
-    series,
+    media: cartesianMedia(many),
   };
 }
 
@@ -517,56 +600,58 @@ function pieOption(
   }));
 
   return {
-    ...BASE,
-    tooltip: {
-      trigger: "item",
-      className: "chart-tip",
-      backgroundColor: "transparent",
-      borderWidth: 0,
-      padding: 0,
-      formatter: (params: unknown) => {
-        const p = params as { name: string; value: number; percent: number; color: string };
-        return (
-          `<div class="chart-tip-label">${escapeHtml(p.name)}</div>` +
-          `<div class="chart-tip-row"><span><i style="background:${p.color}"></i>Value</span>` +
-          `<strong>${escapeHtml(formatValue(p.value * scale, spec.format))}</strong></div>` +
-          `<div class="chart-tip-row"><span>Share</span><strong>${p.percent}%</strong></div>`
-        );
-      },
-    },
-    // The legend names every slice, so leader-line labels would say the
-    // same thing twice and collide doing it.
-    legend: {
-      bottom: 0,
-      itemWidth: 10,
-      itemHeight: 10,
-      icon: "roundRect",
-      textStyle: { color: MUTED, fontSize: 11, fontWeight: 500 },
-    },
-    series: [
-      {
-        id: "slices",
-        type: "pie",
-        radius: ["48%", "74%"],
-        center: ["50%", "42%"],
-        padAngle: 1.5,
-        itemStyle: { borderRadius: 5, borderColor: PAPER, borderWidth: 2 },
-        label: { show: false },
-        // Sweep the ring on rather than fading it in.
-        animationType: "expansion",
-        animationDelay: (idx: number) => idx * 70,
-        universalTransition: { enabled: true, divideShape: "clone" },
-        emphasis: {
-          scaleSize: 8,
-          itemStyle: {
-            shadowBlur: 18,
-            shadowColor: "rgba(24, 24, 27, 0.18)",
-          },
+    baseOption: {
+      ...BASE,
+      tooltip: {
+        ...CARD,
+        trigger: "item",
+        formatter: (params: unknown) => {
+          const p = params as { name: string; value: number; percent: number; color: string };
+          return (
+            `<div class="chart-tip-label">${escapeHtml(p.name)}</div>` +
+            `<div class="chart-tip-row"><span><i style="background:${p.color}"></i>Value</span>` +
+            `<strong>${escapeHtml(formatValue(p.value * scale, spec.format))}</strong></div>` +
+            `<div class="chart-tip-row"><span>Share</span><strong>${p.percent}%</strong></div>`
+          );
         },
-        blur: { itemStyle: { opacity: 0.3 } },
-        data,
       },
-    ],
+      // The legend names every slice, so leader-line labels would say the
+      // same thing twice and collide doing it. Scrolling keeps a long list
+      // from eating the ring on a narrow tile.
+      legend: {
+        bottom: 0,
+        type: "scroll" as const,
+        itemWidth: 10,
+        itemHeight: 10,
+        icon: "roundRect" as const,
+        textStyle: { color: MUTED, fontSize: 11, fontWeight: 500 },
+      },
+      series: [
+        {
+          id: "slices",
+          type: "pie" as const,
+          radius: ["48%", "74%"],
+          center: ["50%", "42%"],
+          padAngle: 1.5,
+          itemStyle: { borderRadius: 5, borderColor: PAPER, borderWidth: 2 },
+          label: { show: false },
+          // Sweep the ring on rather than fading it in.
+          animationType: "expansion" as const,
+          animationDelay: (idx: number) => idx * 70,
+          universalTransition: { enabled: true, divideShape: "clone" as const },
+          emphasis: {
+            scaleSize: 8,
+            itemStyle: {
+              shadowBlur: 18,
+              shadowColor: "rgba(24, 24, 27, 0.18)",
+            },
+          },
+          blur: { itemStyle: { opacity: 0.3 } },
+          data,
+        },
+      ],
+    },
+    media: pieMedia(),
   };
 }
 

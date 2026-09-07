@@ -38,7 +38,7 @@ const ROOMS: {
     href: "/studio",
     name: "Studio",
     blurb:
-      "The live warehouse and a curator that builds dashboards from it. Open any table, or ask for a new view.",
+      "The live warehouse and an analyst that builds dashboards from it. Open any table, or ask for a new view.",
     tone: "purple",
   },
 ];

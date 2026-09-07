@@ -28,7 +28,7 @@ function sourceTone(source: Source): Tone {
 }
 
 function VendorMark({ vendor }: { vendor?: SourceVendor | null }) {
-  if (!vendor) return <i className="swatch" aria-hidden />;
+  if (!vendor) return null;
   return (
     <img
       className="rail-vendor"
@@ -38,6 +38,33 @@ function VendorMark({ vendor }: { vendor?: SourceVendor | null }) {
       height={16}
     />
   );
+}
+
+function KindMark({ kind }: { kind: "storage" | "api" }) {
+  return (
+    <svg className="rail-kind" viewBox="0 0 16 16" aria-hidden>
+      {kind === "storage" ? (
+        <>
+          <ellipse cx="8" cy="3.6" rx="5.2" ry="2" />
+          <path d="M2.8 3.6v8.2c0 1.1 2.3 2 5.2 2s5.2-.9 5.2-2V3.6" />
+          <path d="M2.8 7.4c0 1.1 2.3 2 5.2 2s5.2-.9 5.2-2" />
+        </>
+      ) : (
+        <>
+          <path d="M3 8h3.2M9.8 8H13" />
+          <path d="M5.4 6.2 3 8l2.4 1.8M10.6 6.2 13 8l-2.4 1.8" />
+          <rect x="6.1" y="5.4" width="3.8" height="5.2" rx="0.8" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+function groupKind(source: Source): "storage" | "api" {
+  if (source.id === "youtube-api" || source.mechanism === "API poll") {
+    return "api";
+  }
+  return "storage";
 }
 
 /**
@@ -77,17 +104,6 @@ function Caret({ open }: { open: boolean }) {
       />
     </svg>
   );
-}
-
-function provenance(source: Source, elapsed?: string): string {
-  if (source.id === "youtube-api") {
-    return elapsed ? `API poll · ${elapsed}` : "API poll";
-  }
-  if (source.vendor === "gcs") return "GCS · ClickPipe";
-  if (source.vendor === "s3") return "S3 · ClickPipe";
-  if (source.vendor === "azure") return "Azure · ClickPipe";
-  if (source.mechanism === "ClickPipe") return "ClickPipe";
-  return source.mechanism;
 }
 
 function isUnhealthy(state?: string): boolean {
@@ -143,7 +159,6 @@ function SourceGroup({ source }: { source: Source }) {
     if (containsActive) setOpen(true);
   }, [containsActive]);
 
-  const line = provenance(source, elapsed);
   const warn = isUnhealthy(source.state);
   const tone = sourceTone(source);
 
@@ -157,14 +172,13 @@ function SourceGroup({ source }: { source: Source }) {
         title={`${source.detail}${elapsed ? ` · synced ${elapsed}` : ""}`}
       >
         <Caret open={open} />
-        <VendorMark vendor={source.vendor} />
+        <KindMark kind={groupKind(source)} />
         <span className="rail-row-title">{source.label}</span>
         {warn && <i className="dot warn" title={source.state} />}
         <span className="rail-count">{compact(source.rows)}</span>
       </button>
       {open && (
         <div className="rail-children">
-          <p className="rail-chip">{line}</p>
           {source.streams.map((stream) => (
             <Leaf
               key={`${stream.database}.${stream.table}`}
@@ -214,7 +228,7 @@ function DashboardList({ dashboards }: { dashboards: DashboardSummary[] }) {
   const { openDashboard, activeId } = useWorkspace();
 
   if (dashboards.length === 0) {
-    return <p className="rail-empty">Ask the curator to build one.</p>;
+    return <p className="rail-empty">Ask the analyst to build one.</p>;
   }
 
   return (

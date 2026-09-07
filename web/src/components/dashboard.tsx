@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import type { Dashboard } from "@/lib/api";
+import { packRows } from "@/lib/layout";
 import { PanelCard } from "@/components/panel";
 import { useWorkspace } from "@/components/workspace";
 
@@ -54,16 +55,14 @@ export function DashboardView({ dashboardId }: { dashboardId: string }) {
   if (error) return <p className="canvas-error">{error}</p>;
   if (!dashboard) return <p className="canvas-waiting">Loading dashboard…</p>;
 
-  const panels = dashboard.panels;
+  // Widths are the curator's sense of what matters, not a literal span;
+  // the grid decides the rest.
+  const panels = packRows(dashboard.panels);
   const open = panels.find((p) => p.id === expanded);
 
   return (
     <div className="dash">
       <header className="dash-head">
-        <p className="kicker">
-          <i className="tone-dot" style={{ background: "var(--purple)" }} />
-          Built by the curator
-        </p>
         <h2 className="dash-title">{dashboard.title}</h2>
         {dashboard.description && (
           <p className="dash-note">{dashboard.description}</p>
@@ -72,7 +71,7 @@ export function DashboardView({ dashboardId }: { dashboardId: string }) {
 
       {panels.length === 0 ? (
         <p className="canvas-waiting">
-          No panels yet. Ask the curator for one.
+          No panels yet. Ask the analyst for one.
         </p>
       ) : open ? (
         <PanelCard

@@ -24,5 +24,5 @@ export const ROOMS: Record<
   greenlight: { tone: "yellow", kicker: "Promo vs outcome" },
   rollout: { tone: "blue", kicker: "Country Top 10" },
   promo: { tone: "green", kicker: "YouTube operation" },
-  studio: { tone: "purple", kicker: "Warehouse + curator" },
+  studio: { tone: "purple", kicker: "Warehouse + analyst" },
 };

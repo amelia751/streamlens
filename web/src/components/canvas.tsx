@@ -135,7 +135,7 @@ export function Canvas() {
         <h1>The warehouse, and what you build from it</h1>
         <p className="lede">
           Dashboards you have asked for, and the tables they read. Open a
-          table to inspect it, or ask the curator to build a new view.
+          table to inspect it, or ask the analyst to build a new view.
         </p>
       </div>
     );
