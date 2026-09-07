@@ -34,20 +34,10 @@ export function ControlBar({
   dirty?: boolean;
 }) {
   return (
-    <div
-      className="mb-4 flex flex-wrap items-end gap-3 rounded-xl p-3"
-      style={{ border: "1px solid var(--line)", background: "var(--wash)" }}
-    >
+    <div className="control-bar">
       {children}
-      <div className="ml-auto flex items-center gap-3">
-        {resultLabel && (
-          <span
-            className="tabular-nums"
-            style={{ fontSize: "0.75rem", color: "var(--muted)" }}
-          >
-            {resultLabel}
-          </span>
-        )}
+      <div className="control-bar-meta">
+        {resultLabel && <span className="control-count">{resultLabel}</span>}
         <AnimatePresence>
           {dirty && onReset && (
             <motion.button
@@ -57,13 +47,7 @@ export function ControlBar({
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.94 }}
               transition={{ duration: 0.14 }}
-              className="px-2.5"
-              style={{
-                ...BASE,
-                color: "var(--accent)",
-                borderColor: "var(--accent)",
-                cursor: "pointer",
-              }}
+              className="control-reset"
             >
               Reset
             </motion.button>
@@ -75,20 +59,7 @@ export function ControlBar({
 }
 
 function Label({ children }: { children: React.ReactNode }) {
-  return (
-    <span
-      className="mb-1 block"
-      style={{
-        fontSize: "0.68rem",
-        fontWeight: 600,
-        letterSpacing: "0.06em",
-        textTransform: "uppercase",
-        color: "var(--faint)",
-      }}
-    >
-      {children}
-    </span>
-  );
+  return <span className="control-label">{children}</span>;
 }
 
 export function Select({
@@ -217,8 +188,9 @@ export function Segmented({
                   layoutId={`seg-${label}`}
                   className="absolute inset-0"
                   style={{
-                    background: o.tone ? TONES[o.tone] : "var(--wash)",
-                    opacity: o.tone ? 0.55 : 1,
+                    background: o.tone
+                      ? `color-mix(in srgb, ${TONES[o.tone]} 58%, white)`
+                      : "var(--wash)",
                   }}
                   transition={{ type: "spring", stiffness: 380, damping: 32 }}
                 />
@@ -266,7 +238,7 @@ export function RangeSlider({
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
         className="h-8 w-32 cursor-pointer"
-        style={{ accentColor: "var(--accent)" }}
+        style={{ accentColor: "var(--yellow)" }}
       />
     </label>
   );

@@ -22,7 +22,7 @@ export default async function PromoMachinePage() {
     campaigns = cp.rows;
   } catch (error) {
     return (
-      <Shell title="The Promo Machine" {...ROOMS.promo}>
+      <Shell title="Promo" {...ROOMS.promo}>
         <ErrorNote error={error} />
       </Shell>
     );
@@ -30,8 +30,8 @@ export default async function PromoMachinePage() {
 
   return (
     <Shell
-      title="The Promo Machine"
-      lede="The 44 Netflix-operated YouTube channels as a single publishing operation. Channel identity is pinned to the immutable UC id, not the handle — several Netflix handles are squatted or have been reassigned."
+      title="Promo"
+      lede="44 Netflix YouTube channels as one publishing operation."
       {...ROOMS.promo}
     >
       <PromoMachine

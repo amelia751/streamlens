@@ -179,7 +179,7 @@ export function PromoMachine({
           label="Window"
           value={months}
           onChange={setMonths}
-          options={WINDOWS.map((w) => ({ ...w, tone: undefined }))}
+          options={WINDOWS.map((w) => ({ ...w, tone: "green" as const }))}
         />
         <SearchInput
           label="Channel"
@@ -193,7 +193,7 @@ export function PromoMachine({
         <Reveal className="lg:col-span-2">
           <Panel
             title="Upload cadence"
-            subtitle="Monthly output, split by format. The Shorts ramp is the clearest strategy shift in the data."
+            subtitle="Monthly output, split by format."
           >
             <StackedBars data={byMonth} />
           </Panel>
@@ -222,7 +222,7 @@ export function PromoMachine({
       <Reveal delay={0.1} className="mb-5">
         <Panel
           title="Output by market"
-          subtitle="Videos published per market. The note is the share carrying a Netflix catalogue id in the description."
+            subtitle="Uploads per market. The note is the share carrying a catalogue id."
         >
           <BarList
             tone="teal"
@@ -240,7 +240,7 @@ export function PromoMachine({
         <Reveal delay={0.12}>
           <Panel
             title="Channel roster"
-            subtitle="Latest statistics snapshot per channel. Select any column to sort."
+            subtitle="Latest snapshot per channel."
           >
             <SortableTable
               rows={roster}
@@ -276,7 +276,7 @@ export function PromoMachine({
         <Reveal delay={0.16}>
           <Panel
             title="Widest campaigns"
-            subtitle="Grouped by the Netflix catalogue id found in video descriptions — a far more reliable join key than the video title."
+            subtitle="Grouped by the catalogue id in the video description."
           >
             <DataTable
               rows={campaigns}

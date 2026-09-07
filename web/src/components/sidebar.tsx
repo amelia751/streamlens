@@ -268,25 +268,9 @@ export function Sidebar({
   error?: string;
 }) {
   const dashboards = useDashboards(initialDashboards);
-  const totalRows =
-    warehouse?.databases.reduce((sum, db) => sum + db.rows, 0) ?? 0;
 
   return (
     <aside className="rail">
-      <div className="rail-head">
-        <p className="rail-brand">
-          <i className="swatch tone-purple" aria-hidden />
-          Studio
-        </p>
-        <p className="rail-sub">
-          <i
-            className={`dot${warehouse ? " live" : " warn"}`}
-            aria-hidden
-          />
-          {warehouse ? `${compact(totalRows)} rows` : "not connected"}
-        </p>
-      </div>
-
       {error && (
         <div className="rail-error">
           <strong>Backend unreachable.</strong>

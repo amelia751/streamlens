@@ -54,14 +54,37 @@ class Chart:
         return self.channel("series") is not None and y is not None and y.many
 
 
-# The channels themselves are shared, so two types asking for "an x column"
-# are asking for exactly the same thing.
+# Channels are shared between types, so two charts asking for "an x column"
+# are asking for exactly the same thing. Where a type reads a slot
+# differently — a heatmap's y is a category, not a measure — it gets its own
+# Channel on the same field, because the description is what the model is
+# told when it gets the column wrong.
 _X = Channel("x", "the horizontal axis, usually a date or a category")
 _MEASURES = Channel("y", "the measure columns to plot", many=True)
 _MEASURE = Channel("y", "the single measure to plot")
 _SERIES = Channel(
     "series",
     'a dimension to split one measure across, e.g. "channel"',
+    required=False,
+)
+
+_CATEGORY = Channel("x", "the category each mark stands for")
+_ROW = Channel("y", "the vertical axis, a category rather than a measure")
+_DATE = Channel("x", "a date column, one row per day")
+_OBSERVATIONS = Channel("y", "the measure to take the distribution of, one row per observation")
+_VALUE = Channel("value", "the single measure the mark is sized or shaded by")
+_PATH = Channel("path", "the columns forming the hierarchy, outermost first", many=True)
+_SOURCE = Channel("source", "the column the flow leaves")
+_TARGET = Channel("target", "the column the flow arrives at")
+_PLACE = Channel("x", "a country name or two-letter country code")
+_ENTITY = Channel("x", "the thing being compared, one row each")
+_THEME = Channel(
+    "series",
+    "the stream each band belongs to, e.g. a genre or a category",
+)
+_VALUE_OPTIONAL = Channel(
+    "value",
+    "an optional measure; without it every leaf counts as one",
     required=False,
 )
 
@@ -77,6 +100,78 @@ CHARTS: tuple[Chart, ...] = (
     Chart("bar", "comparing categories, or counts per period.", (_X, _MEASURES, _SERIES)),
     Chart("scatter", "the relationship between two measures.", (_X, _MEASURES, _SERIES)),
     Chart("pie", "a share of a whole, and only at about six slices or fewer.", (_X, _MEASURE)),
+    Chart(
+        "funnel",
+        "steps of a process that only ever loses people, largest first.",
+        (_CATEGORY, _MEASURE),
+    ),
+    Chart(
+        "heatmap",
+        "one measure across two categories at once, e.g. weekday against "
+        "hour, or country against week.",
+        (_X, _ROW, _VALUE),
+    ),
+    Chart(
+        "calendar",
+        "daily activity over a year or more, where the weekly and seasonal "
+        "rhythm is the point.",
+        (_DATE, _VALUE),
+    ),
+    Chart(
+        "treemap",
+        "how a total breaks down, when the parts are too many or too uneven "
+        "for a pie.",
+        (_PATH, _VALUE),
+    ),
+    Chart(
+        "sunburst",
+        "the same breakdown as a treemap when the nesting itself is worth "
+        "seeing; keep it to two or three levels.",
+        (_PATH, _VALUE),
+    ),
+    Chart(
+        "sankey",
+        "flow between two sets of things, e.g. which page a session came "
+        "from and where it went.",
+        (_SOURCE, _TARGET, _VALUE),
+    ),
+    Chart(
+        "boxplot",
+        "how a measure is distributed within each category, not just its "
+        "average. Give it the raw rows; the spread is worked out for you.",
+        (_CATEGORY, _OBSERVATIONS),
+    ),
+    Chart(
+        "map",
+        "a measure by country, shaded on a world map.",
+        (_PLACE, _VALUE),
+    ),
+    Chart(
+        "radar",
+        "several measures of the same things, compared at once — each "
+        "axis is its own scale, so mix units freely.",
+        (_ENTITY, _MEASURES),
+    ),
+    Chart(
+        "gauge",
+        "a single number against a scale, when how full the jar is is the point.",
+        (_MEASURE,),
+    ),
+    Chart(
+        "graph",
+        "a network of things that connect to each other, including cycles.",
+        (_SOURCE, _TARGET, _VALUE),
+    ),
+    Chart(
+        "tree",
+        "a hierarchy when the nesting is the point and the sizes are not.",
+        (_PATH, _VALUE_OPTIONAL),
+    ),
+    Chart(
+        "themeRiver",
+        "how a mix changes over time, when the shifting share is the point.",
+        (_X, _MEASURE, _THEME),
+    ),
     Chart("stat", "a single headline number.", (_MEASURE,)),
     Chart("table", "when the rows are the point — names, ids, long tails.", ()),
 )
@@ -85,10 +180,11 @@ CHARTS: tuple[Chart, ...] = (
 CHART_TYPES: tuple[str, ...] = tuple(c.name for c in CHARTS)
 
 _BY_NAME = {c.name: c for c in CHARTS}
+_BY_LOWER = {c.name.lower(): c for c in CHARTS}
 
 
 def chart(name: str) -> Chart | None:
-    return _BY_NAME.get(name)
+    return _BY_NAME.get(name) or _BY_LOWER.get(name.lower())
 
 
 def type_list() -> str:

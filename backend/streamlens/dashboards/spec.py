@@ -27,10 +27,21 @@ class SpecError(ValueError):
 
 @dataclass
 class PanelSpec:
+    """The columns a panel reads, one field per channel in the registry.
+
+    Every field is optional because which ones matter is a property of the
+    chart type, not of the spec. A panel saved before a channel existed
+    simply has it unset, which is why nothing here is required.
+    """
+
     type: str
     x: str | None = None
     y: list[str] = field(default_factory=list)
     series: str | None = None
+    value: str | None = None
+    path: list[str] = field(default_factory=list)
+    source: str | None = None
+    target: str | None = None
     stacked: bool = False
     format: str = "number"
 
@@ -40,6 +51,10 @@ class PanelSpec:
             "x": self.x,
             "y": self.y,
             "series": self.series,
+            "value": self.value,
+            "path": self.path,
+            "source": self.source,
+            "target": self.target,
             "stacked": self.stacked,
             "format": self.format,
         }
@@ -50,15 +65,22 @@ def parse_spec(raw: dict) -> PanelSpec:
     if not isinstance(raw, dict):
         raise SpecError("spec must be a JSON object")
 
-    chart_type = str(raw.get("type", "")).strip().lower()
-    if chart_type not in CHART_TYPES:
-        raise SpecError(f"unknown chart type {chart_type!r}; use one of {type_list()}")
+    raw_type = str(raw.get("type", "")).strip()
+    kind = chart(raw_type)
+    if kind is None:
+        raise SpecError(f"unknown chart type {raw_type!r}; use one of {type_list()}")
+    chart_type = kind.name
 
-    y_raw = raw.get("y") or []
-    if isinstance(y_raw, str):
-        y_raw = [y_raw]
-    if not isinstance(y_raw, list) or any(not isinstance(c, str) for c in y_raw):
-        raise SpecError("'y' must be a column name or a list of column names")
+    def columns(key: str) -> list[str]:
+        given = raw.get(key) or []
+        if isinstance(given, str):
+            given = [given]
+        if not isinstance(given, list) or any(not isinstance(c, str) for c in given):
+            raise SpecError(f"{key!r} must be a column name or a list of column names")
+        return [str(c) for c in given]
+
+    y_raw = columns("y")
+    path_raw = columns("path")
 
     value_format = str(raw.get("format", "number")).lower()
     if value_format not in VALUE_FORMATS:
@@ -66,13 +88,19 @@ def parse_spec(raw: dict) -> PanelSpec:
             f"unknown format {value_format!r}; use one of {', '.join(VALUE_FORMATS)}"
         )
 
-    x = raw.get("x")
-    series = raw.get("series")
+    def one(key: str) -> str | None:
+        given = raw.get(key)
+        return str(given) if given else None
+
     return PanelSpec(
         type=chart_type,
-        x=str(x) if x else None,
-        y=[str(c) for c in y_raw],
-        series=str(series) if series else None,
+        x=one("x"),
+        y=y_raw,
+        series=one("series"),
+        value=one("value"),
+        path=path_raw,
+        source=one("source"),
+        target=one("target"),
         stacked=bool(raw.get("stacked", False)),
         format=value_format,
     )
@@ -108,9 +136,12 @@ def validate_spec(spec: PanelSpec, columns: list[str]) -> list[str]:
 
         if not chosen:
             if channel.required:
+                # "needs its" rather than "needs a/an", which would have to
+                # know that the article before 'x' is not the one before 'y'.
+                wants = "at least one" if channel.many else "its"
                 problems.append(
-                    f"a {kind.name} panel needs {'at least one' if channel.many else 'an'} "
-                    f"'{channel.name}' column — {channel.describe}"
+                    f"a {kind.name} panel needs {wants} '{channel.name}' column "
+                    f"— {channel.describe}"
                 )
             continue
 

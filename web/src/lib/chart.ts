@@ -17,7 +17,8 @@
 import type { EChartsOption } from "echarts";
 
 import type { PanelSpec, ValueFormat } from "@/lib/api";
-import { INK, LINE, MUTED, PAPER, TONES } from "@/lib/theme";
+import { WORLD_MAP, resolvePlace, type WorldAtlas } from "@/lib/atlas";
+import { FAINT, INK, LINE, MUTED, PAPER, TONES } from "@/lib/theme";
 
 const PALETTE = [
   TONES.blue,
@@ -176,6 +177,27 @@ function percentScale(values: number[]): number {
   return values.every((v) => Math.abs(v) <= 1) ? 100 : 1;
 }
 
+function measureScale(values: number[], format: ValueFormat): number {
+  return format === "percent" ? percentScale(values) : 1;
+}
+
+/** The tooltip card's contents: a heading, then label/value rows. */
+function tip(
+  head: string,
+  rows: { label: string; value: string; color?: string }[],
+): string {
+  const body = rows
+    .map(
+      ({ label, value, color }) =>
+        `<div class="chart-tip-row"><span>${
+          color ? `<i style="background:${color}"></i>` : ""
+        }${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`,
+    )
+    .join("");
+  const title = head ? `<div class="chart-tip-label">${escapeHtml(head)}</div>` : "";
+  return title + body;
+}
+
 // --------------------------------------------------------------- shaping
 
 type Frame = {
@@ -185,6 +207,21 @@ type Frame = {
 
 function indexOf(frame: Frame, column: string | null): number {
   return column ? frame.columns.indexOf(column) : -1;
+}
+
+/** One column's values, in row order. Empty if the column is not there. */
+function columnAt(frame: Frame, column: string | null): unknown[] {
+  const i = indexOf(frame, column);
+  return i === -1 ? [] : frame.rows.map((row) => row[i]);
+}
+
+function numbersAt(frame: Frame, column: string | null): number[] {
+  const i = indexOf(frame, column);
+  return i === -1 ? [] : frame.rows.map((row) => toNumber(row[i]));
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values)];
 }
 
 /**
@@ -375,6 +412,43 @@ function pieMedia() {
   ];
 }
 
+/**
+ * A single-hue ramp, for charts that shade by magnitude.
+ *
+ * The eight-colour palette is exactly wrong here. Distinct hues say "these
+ * are different things", and a heatmap or a choropleth is saying "this one
+ * is more than that one" — an ordering the eye should read without
+ * consulting a key. So one hue, varying only in how much of it there is.
+ */
+function ramp(hex: string): string[] {
+  return [rgba(hex, 0.07), rgba(hex, 0.32), rgba(hex, 0.66), hex, darken(hex, 0.7)];
+}
+
+/** The key beside a shaded chart, which is also its only axis. */
+function shadeScale(
+  min: number,
+  max: number,
+  format: ValueFormat,
+  hex: string = TONES.blue,
+) {
+  return {
+    type: "continuous" as const,
+    // A flat sheet of one colour is what a zero-width range produces.
+    min,
+    max: max > min ? max : min + 1,
+    calculable: true,
+    orient: "horizontal" as const,
+    left: "center" as const,
+    bottom: 4,
+    itemWidth: 10,
+    itemHeight: 180,
+    inRange: { color: ramp(hex) },
+    textStyle: { color: MUTED, fontSize: 10, fontWeight: 500 },
+    // ECharts hands the range ends through as loosely typed option values.
+    formatter: (v: unknown) => formatValue(toNumber(v), format),
+  };
+}
+
 function legend(show: boolean) {
   return show
     ? {
@@ -391,14 +465,55 @@ function legend(show: boolean) {
 
 // ---------------------------------------------------------------- charts
 
-export function chartOption(frame: Frame, spec: PanelSpec): EChartsOption {
-  const { names, xs, values } = buildSeries(frame, spec);
-  const flat = values.flat();
-  const scale = spec.format === "percent" ? percentScale(flat) : 1;
-
-  if (spec.type === "pie") {
-    return pieOption(xs, values[0] ?? [], spec, scale);
+/**
+ * The option for a panel, chosen by what its spec says it is.
+ *
+ * Each family reads different channels and lays out differently enough
+ * that one function with branches inside it would be worse than several.
+ * `atlas` is only consulted by `map`, which cannot resolve a country name
+ * until the geometry has loaded.
+ */
+export function chartOption(
+  frame: Frame,
+  spec: PanelSpec,
+  atlas?: WorldAtlas,
+): EChartsOption {
+  switch (spec.type) {
+    case "pie":
+      return pieOption(frame, spec);
+    case "funnel":
+      return funnelOption(frame, spec);
+    case "heatmap":
+      return heatmapOption(frame, spec);
+    case "calendar":
+      return calendarOption(frame, spec);
+    case "treemap":
+    case "sunburst":
+      return hierarchyOption(frame, spec);
+    case "sankey":
+      return sankeyOption(frame, spec);
+    case "boxplot":
+      return boxplotOption(frame, spec);
+    case "map":
+      return mapOption(frame, spec, atlas);
+    case "radar":
+      return radarOption(frame, spec);
+    case "gauge":
+      return gaugeOption(frame, spec);
+    case "graph":
+      return graphOption(frame, spec);
+    case "tree":
+      return treeOption(frame, spec);
+    case "themeRiver":
+      return themeRiverOption(frame, spec);
+    default:
+      return cartesianOption(frame, spec);
   }
+}
+
+function cartesianOption(frame: Frame, spec: PanelSpec): EChartsOption {
+  const { names, xs, values } = buildSeries(frame, spec);
+  const scale = measureScale(values.flat(), spec.format);
 
   // Dates deserve a real time axis. So do plain numbers, on anything other
   // than a bar chart: laying continuous values out as evenly spaced
@@ -556,6 +671,9 @@ export function chartOption(frame: Frame, spec: PanelSpec): EChartsOption {
       ...bareAxis,
       axisLabel: {
         ...axisLabel,
+        // Offer every category and let hideOverlap thin them by what
+        // actually collides, rather than by how many there are.
+        interval: 0,
         // Long category names are the usual cause of an unreadable axis.
         formatter: (v: string) => (v.length > 14 ? `${v.slice(0, 13)}…` : v),
       },
@@ -591,15 +709,14 @@ export function chartOption(frame: Frame, spec: PanelSpec): EChartsOption {
   };
 }
 
-function pieOption(
-  xs: unknown[],
-  column: number[],
-  spec: PanelSpec,
-  scale: number,
-): EChartsOption {
+function pieOption(frame: Frame, spec: PanelSpec): EChartsOption {
+  const xs = columnAt(frame, spec.x);
+  const column = numbersAt(frame, spec.y[0] ?? null);
+  const scale = measureScale(column, spec.format);
+
   const data = xs.map((x, i) => ({
     name: String(x),
-    value: column[i] ?? 0,
+    value: (column[i] ?? 0) * scale,
     itemStyle: { color: PALETTE[i % PALETTE.length] },
   }));
 
@@ -611,12 +728,10 @@ function pieOption(
         trigger: "item",
         formatter: (params: unknown) => {
           const p = params as { name: string; value: number; percent: number; color: string };
-          return (
-            `<div class="chart-tip-label">${escapeHtml(p.name)}</div>` +
-            `<div class="chart-tip-row"><span><i style="background:${p.color}"></i>Value</span>` +
-            `<strong>${escapeHtml(formatValue(p.value * scale, spec.format))}</strong></div>` +
-            `<div class="chart-tip-row"><span>Share</span><strong>${p.percent}%</strong></div>`
-          );
+          return tip(p.name, [
+            { label: "Value", value: formatValue(p.value, spec.format), color: p.color },
+            { label: "Share", value: `${p.percent}%` },
+          ]);
         },
       },
       // The legend names every slice, so leader-line labels would say the
@@ -654,6 +769,1172 @@ function pieOption(
       ],
     },
     media: pieMedia(),
+  };
+}
+
+/**
+ * Steps of a process, each a share of the one above it.
+ *
+ * The names sit inside the blocks, which is the whole advantage of a funnel
+ * over a bar chart — until the panel is too narrow for them, when they move
+ * out to a legend instead.
+ */
+function funnelOption(frame: Frame, spec: PanelSpec): EChartsOption {
+  const names = columnAt(frame, spec.x).map(String);
+  const column = numbersAt(frame, spec.y[0] ?? null);
+  const scale = measureScale(column, spec.format);
+  const top = (column[0] ?? 0) * scale;
+
+  const data = names.map((name, i) => ({
+    name,
+    value: (column[i] ?? 0) * scale,
+    itemStyle: {
+      color: fade(PALETTE[i % PALETTE.length], 0.95, 0.62),
+      borderColor: PAPER,
+      borderWidth: 2,
+    },
+  }));
+
+  return {
+    baseOption: {
+      ...BASE,
+      tooltip: {
+        ...CARD,
+        trigger: "item",
+        formatter: (params: unknown) => {
+          const p = params as { name: string; value: number; color: string };
+          const rows = [
+            { label: "Value", value: formatValue(p.value, spec.format), color: p.color },
+          ];
+          // The drop from the first step is the number a funnel is drawn to
+          // answer, and it is not one the reader should be doing by eye.
+          if (top > 0) {
+            rows.push({
+              label: "Of first step",
+              value: `${Math.round((p.value / top) * 1000) / 10}%`,
+              color: undefined as unknown as string,
+            });
+          }
+          return tip(p.name, rows);
+        },
+      },
+      legend: {
+        show: false,
+        bottom: 0,
+        itemWidth: 10,
+        itemHeight: 10,
+        icon: "roundRect" as const,
+        textStyle: { color: MUTED, fontSize: 10, fontWeight: 500 },
+      },
+      series: [
+        {
+          id: "steps",
+          type: "funnel" as const,
+          top: 6,
+          bottom: 6,
+          left: "6%",
+          right: "6%",
+          minSize: "22%",
+          sort: "descending" as const,
+          gap: 3,
+          itemStyle: { borderRadius: 4 },
+          label: {
+            show: true,
+            position: "inside" as const,
+            color: INK,
+            fontSize: 11,
+            fontWeight: 600,
+            overflow: "truncate" as const,
+          },
+          labelLine: { show: false },
+          animationDelay: (idx: number) => idx * 80,
+          universalTransition: { enabled: true, divideShape: "clone" as const },
+          emphasis: { focus: "series" as const, label: { fontSize: 12 } },
+          blur: { itemStyle: { opacity: 0.3 } },
+          data,
+        },
+      ],
+    },
+    media: [
+      {
+        query: { maxWidth: NARROW },
+        option: {
+          legend: { show: true, type: "scroll" },
+          series: [{ bottom: 26, label: { show: false } }],
+        },
+      },
+      {
+        option: {
+          legend: { show: false, type: "plain" },
+          series: [{ bottom: 6, label: { show: true } }],
+        },
+      },
+    ],
+  };
+}
+
+/** One measure across two categories, shaded rather than plotted. */
+function heatmapOption(frame: Frame, spec: PanelSpec): EChartsOption {
+  const rowColumn = spec.y[0] ?? null;
+  const xs = unique(columnAt(frame, spec.x).map(String));
+  const ys = unique(columnAt(frame, rowColumn).map(String));
+  const scale = measureScale(numbersAt(frame, spec.value), spec.format);
+
+  const xi = indexOf(frame, spec.x);
+  const yi = indexOf(frame, rowColumn);
+  const vi = indexOf(frame, spec.value);
+  const xslot = new Map(xs.map((v, i) => [v, i]));
+  const yslot = new Map(ys.map((v, i) => [v, i]));
+
+  const data = frame.rows.map((row) => [
+    xslot.get(String(row[xi])) ?? 0,
+    yslot.get(String(row[yi])) ?? 0,
+    toNumber(row[vi]) * scale,
+  ]);
+
+  const values = data.map((d) => d[2]);
+  const min = values.length ? Math.min(...values) : 0;
+  const max = values.length ? Math.max(...values) : 1;
+
+  const label = { color: MUTED, fontSize: 10, fontWeight: 500, hideOverlap: true };
+  const bare = { axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false } };
+
+  return {
+    baseOption: {
+      ...BASE,
+      tooltip: {
+        ...CARD,
+        trigger: "item" as const,
+        formatter: (params: unknown) => {
+          const p = params as { value: [number, number, number] };
+          const [cx, cy, v] = p.value;
+          return tip(`${xs[cx] ?? ""} · ${ys[cy] ?? ""}`, [
+            { label: "Value", value: formatValue(v, spec.format) },
+          ]);
+        },
+      },
+      // The scale sits under the plot, so the grid has to clear both it and
+      // the axis labels or the two are drawn on top of each other.
+      grid: { top: 6, left: 2, right: 8, bottom: 44, containLabel: true },
+      xAxis: { type: "category" as const, data: xs, ...bare, axisLabel: label },
+      yAxis: {
+        type: "category" as const,
+        data: ys,
+        // A category axis counts up from the bottom, which puts the first
+        // row of the query at the foot of the chart. A heatmap is read like
+        // a table, so the first row belongs at the top.
+        inverse: true,
+        ...bare,
+        axisLabel: label,
+      },
+      visualMap: shadeScale(min, max, spec.format),
+      series: [
+        {
+          id: "cells",
+          type: "heatmap" as const,
+          data,
+          // The gap between cells is a paper-coloured border rather than a
+          // real gap, so the grid reads as tiles instead of a bitmap.
+          itemStyle: { borderColor: PAPER, borderWidth: 2, borderRadius: 3 },
+          animationDelay: (idx: number) => Math.min(idx * 4, STAGGER_BUDGET_MS),
+          emphasis: {
+            itemStyle: { borderColor: INK, borderWidth: 1.5, shadowBlur: 10 },
+          },
+          blur: { itemStyle: { opacity: 0.35 } },
+        },
+      ],
+    },
+    media: [
+      { query: { maxWidth: NARROW }, option: { xAxis: { axisLabel: { fontSize: 9 } }, yAxis: { axisLabel: { fontSize: 9 } } } },
+      { option: { xAxis: { axisLabel: { fontSize: 10 } }, yAxis: { axisLabel: { fontSize: 10 } } } },
+    ],
+  };
+}
+
+/** Daily activity laid out as weeks, where the rhythm is the point. */
+function calendarOption(frame: Frame, spec: PanelSpec): EChartsOption {
+  const xi = indexOf(frame, spec.x);
+  const vi = indexOf(frame, spec.value);
+  const scale = measureScale(numbersAt(frame, spec.value), spec.format);
+
+  const data = frame.rows
+    .map(
+      (row) =>
+        [String(row[xi] ?? "").slice(0, 10), toNumber(row[vi]) * scale] as [string, number],
+    )
+    .filter(([day]) => ISO_DATE.test(day))
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1));
+
+  const values = data.map(([, v]) => v);
+  const min = values.length ? Math.min(...values) : 0;
+  const max = values.length ? Math.max(...values) : 1;
+  const range = data.length ? [data[0][0], data[data.length - 1][0]] : undefined;
+
+  return {
+    baseOption: {
+      ...BASE,
+      tooltip: {
+        ...CARD,
+        trigger: "item" as const,
+        formatter: (params: unknown) => {
+          const p = params as { value: [string, number] };
+          return tip(p.value[0], [
+            { label: "Value", value: formatValue(p.value[1], spec.format) },
+          ]);
+        },
+      },
+      visualMap: shadeScale(min, max, spec.format, TONES.green),
+      calendar: {
+        top: 24,
+        left: 32,
+        right: 8,
+        bottom: 36,
+        range,
+        cellSize: ["auto", "auto"],
+        splitLine: { show: false },
+        // An empty day is a fainter version of the grid, not a hole in it.
+        itemStyle: { color: PAPER, borderColor: LINE, borderWidth: 1 },
+        yearLabel: { show: false },
+        dayLabel: { color: MUTED, fontSize: 9, firstDay: 1 },
+        monthLabel: { color: MUTED, fontSize: 10 },
+      },
+      series: [
+        {
+          id: "days",
+          type: "heatmap" as const,
+          coordinateSystem: "calendar" as const,
+          data,
+          itemStyle: { borderColor: PAPER, borderWidth: 1.5, borderRadius: 2 },
+          animationDelay: (idx: number) => Math.min(idx * 2, STAGGER_BUDGET_MS),
+          emphasis: { itemStyle: { borderColor: INK, borderWidth: 1.5 } },
+        },
+      ],
+    },
+    media: [
+      { query: { maxWidth: NARROW }, option: { calendar: { left: 24, dayLabel: { show: false } } } },
+      { option: { calendar: { left: 32, dayLabel: { show: true } } } },
+    ],
+  };
+}
+
+type Branch = { name: string; value: number; children: Branch[] };
+
+/** Roll the rows up into the nesting named by `path`, summing as it goes. */
+function buildTree(frame: Frame, path: string[], value: string | null, scale: number): Branch[] {
+  const levels = path.map((c) => frame.columns.indexOf(c)).filter((i) => i !== -1);
+  const vi = indexOf(frame, value);
+  const roots: Branch[] = [];
+  const seen = new Map<string, Branch>();
+
+  for (const row of frame.rows) {
+    const amount = vi === -1 ? 1 : toNumber(row[vi]) * scale;
+    let key = "";
+    let siblings = roots;
+
+    for (const ci of levels) {
+      const name = String(row[ci] ?? "—");
+      // A null byte cannot appear in a column value, so it is safe as the
+      // separator that keeps "a/b" and "a" + "/b" from colliding.
+      key += `\u0000${name}`;
+      let node = seen.get(key);
+      if (!node) {
+        node = { name, value: 0, children: [] };
+        seen.set(key, node);
+        siblings.push(node);
+      }
+      node.value += amount;
+      siblings = node.children;
+    }
+  }
+
+  return roots;
+}
+
+type TreeNode = { name: string; value: number; children?: TreeNode[] };
+
+/** ECharts reads an empty `children` as a branch holding nothing, not a leaf. */
+function asNodes(branches: Branch[]): TreeNode[] {
+  return branches.map(({ name, value, children }) =>
+    children.length
+      ? { name, value, children: asNodes(children) }
+      : { name, value },
+  );
+}
+
+function hierarchyOption(frame: Frame, spec: PanelSpec): EChartsOption {
+  const scale = measureScale(numbersAt(frame, spec.value), spec.format);
+  const tree = buildTree(frame, spec.path, spec.value, scale);
+  const nested = spec.path.length > 1;
+
+  // Colour the top level explicitly. Left to itself the treemap derives
+  // child colours by pushing saturation, which turns a pastel palette into
+  // a saturated one — the branches came out royal blue and olive.
+  const data = asNodes(tree).map((node, i) => ({
+    ...node,
+    itemStyle: { color: PALETTE[i % PALETTE.length] },
+  }));
+
+  const tooltip = {
+    ...CARD,
+    trigger: "item" as const,
+    formatter: (params: unknown) => {
+      const p = params as { name: string; value: number; color: string };
+      return tip(p.name, [
+        { label: "Value", value: formatValue(p.value, spec.format), color: p.color },
+      ]);
+    },
+  };
+
+  if (spec.type === "sunburst") {
+    return {
+      baseOption: {
+        ...BASE,
+        tooltip,
+        series: [
+          {
+            id: "wedges",
+            type: "sunburst" as const,
+            data,
+            // Short of 100% so a label on the outer ring has somewhere to
+            // go; at 92% the long ones were drawn past the panel edge.
+            radius: ["16%", "76%"],
+            center: ["50%", "50%"],
+            // Keep the query's ordering; re-sorting by size hides whatever
+            // the ORDER BY was trying to say.
+            sort: undefined,
+            itemStyle: { borderColor: PAPER, borderWidth: 2, borderRadius: 3 },
+            label: {
+              color: INK,
+              fontSize: 10,
+              fontWeight: 500,
+              // A wedge too thin to hold its name is better left to the
+              // tooltip than labelled with something unreadable.
+              minAngle: 16,
+              width: 64,
+              overflow: "truncate" as const,
+            },
+            emphasis: { focus: "ancestor" as const },
+            blur: { itemStyle: { opacity: 0.3 } },
+            animationDelay: (idx: number) => idx * 26,
+            universalTransition: { enabled: true, divideShape: "clone" as const },
+          },
+        ],
+      },
+      media: [
+        { query: { maxWidth: NARROW }, option: { series: [{ label: { show: false } }] } },
+        { option: { series: [{ label: { show: true } }] } },
+      ],
+    };
+  }
+
+  return {
+    baseOption: {
+      ...BASE,
+      tooltip,
+      series: [
+        {
+          id: "blocks",
+          type: "treemap" as const,
+          data,
+          top: 2,
+          left: 2,
+          right: 2,
+          bottom: 2,
+          roam: false,
+          nodeClick: false,
+          breadcrumb: { show: false },
+          // A nested treemap needs a strip to name the parent; a flat one
+          // would just be wasting the space.
+          upperLabel: nested
+            ? { show: true, height: 18, color: MUTED, fontSize: 10, fontWeight: 600 }
+            : { show: false },
+          label: {
+            show: true,
+            color: INK,
+            fontSize: 11,
+            fontWeight: 600,
+            overflow: "truncate" as const,
+          },
+          itemStyle: { borderColor: PAPER, borderWidth: 2, borderRadius: 4, gapWidth: 2 },
+          levels: [
+            { itemStyle: { gapWidth: 3, borderWidth: 3, borderColor: PAPER } },
+            // Vary how much of the parent's colour each child gets, rather
+            // than its saturation, so the hue stays where the palette put it.
+            {
+              colorAlpha: [0.45, 0.95],
+              itemStyle: { gapWidth: 1, borderWidth: 1, borderColor: PAPER },
+            },
+          ],
+          emphasis: { focus: "descendant" as const },
+          blur: { itemStyle: { opacity: 0.35 } },
+          animationDelay: (idx: number) => idx * 24,
+          universalTransition: { enabled: true, divideShape: "clone" as const },
+        },
+      ],
+    },
+    media: [
+      { query: { maxWidth: NARROW }, option: { series: [{ label: { fontSize: 10 } }] } },
+      { option: { series: [{ label: { fontSize: 11 } }] } },
+    ],
+  };
+}
+
+/**
+ * Whether following the links ever arrives back where it started.
+ *
+ * ECharts throws rather than draws on a cyclic sankey, and a cycle is easy
+ * to produce by accident — any clickstream where a visitor goes back to a
+ * page they came from has one.
+ */
+function hasCycle(links: { source: string; target: string }[]): boolean {
+  const out = new Map<string, string[]>();
+  for (const { source, target } of links) {
+    out.set(source, [...(out.get(source) ?? []), target]);
+  }
+
+  const state = new Map<string, 1 | 2>();
+  const walk = (node: string): boolean => {
+    const seen = state.get(node);
+    if (seen === 1) return true;
+    if (seen === 2) return false;
+    state.set(node, 1);
+    for (const next of out.get(node) ?? []) {
+      if (walk(next)) return true;
+    }
+    state.set(node, 2);
+    return false;
+  };
+
+  return [...out.keys()].some(walk);
+}
+
+function sankeyOption(frame: Frame, spec: PanelSpec): EChartsOption {
+  const si = indexOf(frame, spec.source);
+  const ti = indexOf(frame, spec.target);
+  const vi = indexOf(frame, spec.value);
+  const scale = measureScale(numbersAt(frame, spec.value), spec.format);
+
+  let links = frame.rows
+    .map((row) => ({
+      source: String(row[si] ?? "—"),
+      target: String(row[ti] ?? "—"),
+      value: toNumber(row[vi]) * scale,
+    }))
+    .filter((link) => link.value > 0);
+
+  if (hasCycle(links)) {
+    // Split every destination into its own node so the graph becomes two
+    // columns and the cycle disappears. A zero-width space keeps the key
+    // distinct while the label still reads as the plain name.
+    links = links.map((link) => ({ ...link, target: `${link.target}\u200b` }));
+  }
+
+  const names = unique(links.flatMap((link) => [link.source, link.target]));
+  const sources = new Set(links.map((link) => link.source));
+
+  const nodes = names.map((name, i) => ({
+    name,
+    itemStyle: { color: PALETTE[i % PALETTE.length], borderWidth: 0 },
+    // Labels sit to the right of their node, which runs a final column's
+    // names off the edge of the panel. Anything nothing flows out of is a
+    // final column, so its name goes on the inside instead.
+    label: sources.has(name) ? undefined : { position: "left" as const },
+  }));
+
+  const clean = (name: string) => name.replace(/\u200b/g, "");
+
+  return {
+    baseOption: {
+      ...BASE,
+      tooltip: {
+        ...CARD,
+        trigger: "item" as const,
+        formatter: (params: unknown) => {
+          const p = params as {
+            dataType: string;
+            name: string;
+            value: number;
+            data: { source?: string; target?: string; value?: number };
+            color: string;
+          };
+          if (p.dataType === "edge") {
+            return tip(`${clean(p.data.source ?? "")} → ${clean(p.data.target ?? "")}`, [
+              { label: "Flow", value: formatValue(toNumber(p.data.value), spec.format) },
+            ]);
+          }
+          return tip(clean(p.name), [
+            { label: "Total", value: formatValue(p.value, spec.format), color: p.color },
+          ]);
+        },
+      },
+      series: [
+        {
+          id: "flows",
+          type: "sankey" as const,
+          data: nodes,
+          links,
+          top: 8,
+          bottom: 8,
+          left: 6,
+          right: 6,
+          nodeWidth: 12,
+          nodeGap: 9,
+          nodeAlign: "justify" as const,
+          draggable: false,
+          label: {
+            color: INK,
+            fontSize: 10,
+            fontWeight: 500,
+            formatter: (p: { name: string }) => clean(p.name),
+          },
+          itemStyle: { borderWidth: 0, borderRadius: 2 },
+          // A gradient makes a ribbon read as going from one place to
+          // another rather than just connecting them.
+          lineStyle: { color: "gradient" as const, curveness: 0.5, opacity: 0.34 },
+          emphasis: { focus: "adjacency" as const, lineStyle: { opacity: 0.6 } },
+          blur: { itemStyle: { opacity: 0.25 }, lineStyle: { opacity: 0.05 } },
+        },
+      ],
+    },
+    media: [
+      { query: { maxWidth: NARROW }, option: { series: [{ label: { show: false } }] } },
+      { option: { series: [{ label: { show: true } }] } },
+    ],
+  };
+}
+
+/** Linear-interpolated quantile, the same convention as numpy's default. */
+function quantile(sorted: number[], q: number): number {
+  if (!sorted.length) return 0;
+  const pos = (sorted.length - 1) * q;
+  const lo = Math.floor(pos);
+  const hi = Math.ceil(pos);
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+}
+
+/**
+ * The spread of a measure within each category.
+ *
+ * The query hands over raw observations and the five-number summary is
+ * worked out here, because asking a model to write a median in SQL — let
+ * alone a 1.5-IQR whisker — is a good way to get a chart that is subtly
+ * wrong and looks fine.
+ */
+function boxplotOption(frame: Frame, spec: PanelSpec): EChartsOption {
+  const xi = indexOf(frame, spec.x);
+  const yi = frame.columns.indexOf(spec.y[0] ?? "");
+  const scale = measureScale(numbersAt(frame, spec.y[0] ?? null), spec.format);
+
+  const groups = new Map<string, number[]>();
+  for (const row of frame.rows) {
+    const key = String(row[xi] ?? "—");
+    const bucket = groups.get(key);
+    const observation = toNumber(row[yi]) * scale;
+    if (bucket) bucket.push(observation);
+    else groups.set(key, [observation]);
+  }
+
+  const categories = [...groups.keys()];
+  const boxes: number[][] = [];
+  const outliers: [number, number][] = [];
+
+  categories.forEach((name, i) => {
+    const sorted = (groups.get(name) ?? []).slice().sort((a, b) => a - b);
+    const q1 = quantile(sorted, 0.25);
+    const median = quantile(sorted, 0.5);
+    const q3 = quantile(sorted, 0.75);
+    const reach = 1.5 * (q3 - q1);
+
+    // Whiskers stop at the furthest observation still within 1.5 IQR, not
+    // at the fence itself, so they always land on a value that exists.
+    const inside = sorted.filter((v) => v >= q1 - reach && v <= q3 + reach);
+    const low = inside.length ? inside[0] : (sorted[0] ?? 0);
+    const high = inside.length ? inside[inside.length - 1] : (sorted[sorted.length - 1] ?? 0);
+
+    boxes.push([low, q1, median, q3, high]);
+    for (const v of sorted) {
+      if (v < low || v > high) outliers.push([i, v]);
+    }
+  });
+
+  const axisLabel = { color: MUTED, fontSize: 11, fontWeight: 500, hideOverlap: true };
+  const tone = TONES.blue;
+
+  return {
+    baseOption: {
+      ...BASE,
+      tooltip: {
+        ...CARD,
+        trigger: "item" as const,
+        formatter: (params: unknown) => {
+          const p = params as { seriesId: string; name: string; value: number[]; dataIndex: number };
+          const show = (v: number) => formatValue(v, spec.format);
+          if (p.seriesId === "outliers") {
+            return tip(categories[p.value[0]] ?? "", [
+              { label: "Outlier", value: show(p.value[1]) },
+            ]);
+          }
+          // A boxplot's value arrives with the category index in front.
+          const [, low, q1, median, q3, high] = p.value;
+          return tip(categories[p.dataIndex] ?? "", [
+            { label: "Max", value: show(high) },
+            { label: "Upper quartile", value: show(q3) },
+            { label: "Median", value: show(median) },
+            { label: "Lower quartile", value: show(q1) },
+            { label: "Min", value: show(low) },
+          ]);
+        },
+      },
+      grid: { left: 4, right: 10, bottom: 0, top: 10, containLabel: true },
+      xAxis: {
+        type: "category" as const,
+        data: categories,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { show: false },
+        axisLabel: {
+          ...axisLabel,
+          // Offer every category and let hideOverlap decide. On its own the
+          // axis thins labels by counting them, so six categories with room
+          // to spare still came out showing every other one.
+          interval: 0,
+          formatter: (v: string) => (v.length > 14 ? `${v.slice(0, 13)}…` : v),
+        },
+      },
+      yAxis: {
+        type: "value" as const,
+        scale: true,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { lineStyle: { color: LINE, type: [3, 6] as [number, number] } },
+        axisLabel: { ...axisLabel, formatter: (v: number) => formatValue(v, spec.format) },
+      },
+      series: [
+        {
+          id: "spread",
+          type: "boxplot" as const,
+          data: boxes,
+          boxWidth: [12, 48] as [number, number],
+          itemStyle: {
+            color: fade(tone, 0.9, 0.5),
+            borderColor: darken(tone),
+            borderWidth: 1.4,
+          },
+          emphasis: {
+            focus: "series" as const,
+            itemStyle: { borderWidth: 2, shadowBlur: 12, shadowColor: rgba(INK, 0.15) },
+          },
+          blur: { itemStyle: { opacity: 0.3 } },
+          animationDelay: (idx: number) => idx * 70,
+        },
+        {
+          id: "outliers",
+          type: "scatter" as const,
+          data: outliers,
+          symbolSize: 5,
+          itemStyle: {
+            color: rgba(TONES.purple, 0.5),
+            borderColor: darken(TONES.purple),
+            borderWidth: 1,
+          },
+          emphasis: { scale: 1.6 },
+          blur: { itemStyle: { opacity: 0.12 } },
+          animationDelay: () => 260,
+        },
+      ],
+    },
+    media: [
+      { query: { maxWidth: NARROW }, option: { xAxis: { axisLabel: { fontSize: 10 } }, yAxis: { axisLabel: { fontSize: 10 } } } },
+      { option: { xAxis: { axisLabel: { fontSize: 11 } }, yAxis: { axisLabel: { fontSize: 11 } } } },
+    ],
+  };
+}
+
+/** A measure by country, shaded on the world map. */
+function mapOption(frame: Frame, spec: PanelSpec, atlas?: WorldAtlas): EChartsOption {
+  const xi = indexOf(frame, spec.x);
+  const vi = indexOf(frame, spec.value);
+  const scale = measureScale(numbersAt(frame, spec.value), spec.format);
+
+  const data: { name: string; value: number }[] = [];
+  let unplaced = 0;
+
+  for (const row of frame.rows) {
+    const name = atlas ? resolvePlace(atlas, row[xi]) : undefined;
+    if (!name) {
+      unplaced += 1;
+      continue;
+    }
+    data.push({ name, value: toNumber(row[vi]) * scale });
+  }
+
+  const values = data.map((d) => d.value);
+  const min = values.length ? Math.min(...values) : 0;
+  const max = values.length ? Math.max(...values) : 1;
+
+  return {
+    baseOption: {
+      ...BASE,
+      tooltip: {
+        ...CARD,
+        trigger: "item" as const,
+        formatter: (params: unknown) => {
+          const p = params as { name: string; value: number };
+          return tip(p.name, [
+            {
+              label: "Value",
+              // Hovering a country the query said nothing about should say
+              // so, not read as a zero.
+              value: Number.isFinite(p.value) ? formatValue(p.value, spec.format) : "No data",
+            },
+          ]);
+        },
+      },
+      visualMap: shadeScale(min, max, spec.format),
+      // Territories too small to appear at this resolution are dropped, and
+      // a choropleth that quietly loses rows is worse than one that admits it.
+      graphic: unplaced
+        ? [
+            {
+              type: "text" as const,
+              right: 2,
+              top: 2,
+              silent: true,
+              style: {
+                text: `${unplaced} not on the map`,
+                fill: FAINT,
+                fontSize: 10,
+                fontFamily: "inherit",
+              },
+            },
+          ]
+        : [],
+      series: [
+        {
+          id: "places",
+          type: "map" as const,
+          map: WORLD_MAP,
+          data,
+          roam: false,
+          top: 2,
+          bottom: 40,
+          // Two corrections, both about filling the panel. ECharts defaults
+          // to squeezing longitude by a quarter, a convention from its
+          // China maps that leaves a world map narrow; and cropping the
+          // empty latitudes below Tierra del Fuego and above the Arctic
+          // removes a third of the height that never holds a country.
+          aspectScale: 1,
+          boundingCoords: [
+            [-180, 83],
+            [180, -56],
+          ] as [[number, number], [number, number]],
+          selectedMode: false as const,
+          label: { show: false },
+          itemStyle: { areaColor: "#f4f4f5", borderColor: PAPER, borderWidth: 0.8 },
+          emphasis: {
+            label: { show: false },
+            itemStyle: { areaColor: TONES.yellow, borderColor: INK, borderWidth: 1 },
+          },
+        },
+      ],
+    },
+    media: [
+      {
+        query: { maxWidth: NARROW },
+        option: {
+          visualMap: { itemHeight: 110 },
+          series: [{ top: 2, bottom: 36 }],
+        },
+      },
+      {
+        option: {
+          visualMap: { itemHeight: 180 },
+          series: [{ top: 2, bottom: 40 }],
+        },
+      },
+    ],
+  };
+}
+
+function radarOption(frame: Frame, spec: PanelSpec): EChartsOption {
+  const names = columnAt(frame, spec.x).map(String);
+  const measures = spec.y;
+  const columns = measures.map((column) => {
+    const raw = numbersAt(frame, column);
+    const scale = measureScale(raw, spec.format);
+    return raw.map((v) => v * scale);
+  });
+
+  const indicators = measures.map((name, i) => {
+    const peak = columns[i].length ? Math.max(0, ...columns[i]) : 0;
+    return { name, max: peak > 0 ? peak * 1.08 : 1 };
+  });
+
+  const data = names.map((name, row) => {
+    const tone = PALETTE[row % PALETTE.length];
+    return {
+      name,
+      value: measures.map((_, i) => columns[i][row] ?? 0),
+      itemStyle: { color: tone },
+      lineStyle: { color: darken(tone), width: 1.8 },
+      areaStyle: { color: rgba(tone, names.length > 2 ? 0.1 : 0.2) },
+    };
+  });
+
+  return {
+    baseOption: {
+      ...BASE,
+      tooltip: {
+        ...CARD,
+        trigger: "item" as const,
+        formatter: (params: unknown) => {
+          const p = params as { name: string; value: number[]; color: string };
+          return tip(
+            p.name,
+            measures.map((measure, i) => ({
+              label: measure,
+              value: formatValue(p.value[i] ?? 0, spec.format),
+              color: p.color,
+            })),
+          );
+        },
+      },
+      legend: legend(names.length > 1),
+      radar: {
+        indicator: indicators,
+        center: ["50%", names.length > 1 ? "56%" : "50%"],
+        radius: "62%",
+        startAngle: 90,
+        shape: "polygon" as const,
+        splitNumber: 4,
+        axisName: { color: MUTED, fontSize: 10, fontWeight: 500 },
+        splitLine: { lineStyle: { color: LINE, type: [3, 6] as [number, number] } },
+        splitArea: { areaStyle: { color: [PAPER, rgba(TONES.gray, 0.35)] } },
+        axisLine: { lineStyle: { color: LINE } },
+      },
+      series: [
+        {
+          id: "spokes",
+          type: "radar" as const,
+          data,
+          symbol: "circle",
+          symbolSize: 6,
+          animationDelay: (idx: number) => idx * 80,
+          emphasis: { focus: "self" as const, lineStyle: { width: 2.4 } },
+          blur: { lineStyle: { opacity: 0.12 }, areaStyle: { opacity: 0.04 } },
+        },
+      ],
+    },
+    media: [
+      {
+        query: { maxWidth: NARROW },
+        option: {
+          radar: { radius: "48%", axisName: { fontSize: 9 } },
+          legend: { textStyle: { fontSize: 10 } },
+        },
+      },
+      {
+        option: {
+          radar: { radius: "62%", axisName: { fontSize: 10 } },
+          legend: { textStyle: { fontSize: 11 } },
+        },
+      },
+    ],
+  };
+}
+
+function niceCeiling(value: number): number {
+  if (value <= 0) return 1;
+  const pow = 10 ** Math.floor(Math.log10(value));
+  const steps = [1, 2, 2.5, 5, 10];
+  for (const step of steps) {
+    if (value <= step * pow) return step * pow;
+  }
+  return 10 * pow;
+}
+
+function gaugeOption(frame: Frame, spec: PanelSpec): EChartsOption {
+  const raw = numbersAt(frame, spec.y[0] ?? null)[0] ?? 0;
+  const scale = measureScale([raw], spec.format);
+  const shown = raw * scale;
+  const max = spec.format === "percent" ? 100 : niceCeiling(shown * 1.15);
+  const tone = TONES.blue;
+
+  return {
+    ...BASE,
+    tooltip: { show: false },
+    series: [
+      {
+        id: "dial",
+        type: "gauge" as const,
+        startAngle: 210,
+        endAngle: -30,
+        min: 0,
+        max,
+        center: ["50%", "58%"],
+        radius: "92%",
+        progress: {
+          show: true,
+          width: 16,
+          roundCap: true,
+          itemStyle: { color: fade(tone, 0.95, 0.55) },
+        },
+        pointer: { show: false },
+        axisLine: { roundCap: true, lineStyle: { width: 16, color: [[1, LINE]] } },
+        axisTick: { show: false },
+        splitLine: { show: false },
+        axisLabel: { show: false },
+        anchor: { show: false },
+        title: { show: false },
+        detail: {
+          valueAnimation: true,
+          offsetCenter: [0, "4%"],
+          fontSize: 28,
+          fontWeight: 600,
+          color: INK,
+          fontFamily: "inherit",
+          formatter: (v: number) => formatValue(v, spec.format),
+        },
+        data: [{ value: shown }],
+        animationDuration: ENTER_MS,
+        animationEasing: "cubicOut" as const,
+      },
+    ],
+  };
+}
+
+function graphOption(frame: Frame, spec: PanelSpec): EChartsOption {
+  const si = indexOf(frame, spec.source);
+  const ti = indexOf(frame, spec.target);
+  const vi = indexOf(frame, spec.value);
+  const scale = vi === -1 ? 1 : measureScale(numbersAt(frame, spec.value), spec.format);
+
+  const links = frame.rows
+    .map((row) => ({
+      source: String(row[si] ?? "—"),
+      target: String(row[ti] ?? "—"),
+      value: (vi === -1 ? 1 : toNumber(row[vi])) * scale,
+    }))
+    .filter((link) => link.source && link.target && link.value > 0);
+
+  const names = unique(links.flatMap((link) => [link.source, link.target]));
+  const peak = links.reduce((m, link) => Math.max(m, link.value), 1);
+
+  const nodes = names.map((name, i) => {
+    const weight = links
+      .filter((link) => link.source === name || link.target === name)
+      .reduce((sum, link) => sum + link.value, 0);
+    return {
+      name,
+      value: weight,
+      symbolSize: 10 + (22 * weight) / (peak * 2),
+      itemStyle: { color: PALETTE[i % PALETTE.length], borderWidth: 0 },
+    };
+  });
+
+  return {
+    baseOption: {
+      ...BASE,
+      tooltip: {
+        ...CARD,
+        trigger: "item" as const,
+        formatter: (params: unknown) => {
+          const p = params as {
+            dataType: string;
+            name: string;
+            value: number;
+            data: { source?: string; target?: string; value?: number };
+            color: string;
+          };
+          if (p.dataType === "edge") {
+            return tip(`${p.data.source ?? ""} → ${p.data.target ?? ""}`, [
+              { label: "Weight", value: formatValue(toNumber(p.data.value), spec.format) },
+            ]);
+          }
+          return tip(p.name, [
+            { label: "Total", value: formatValue(p.value, spec.format), color: p.color },
+          ]);
+        },
+      },
+      series: [
+        {
+          id: "net",
+          type: "graph" as const,
+          layout: "force" as const,
+          data: nodes,
+          links: links.map((link) => ({
+            ...link,
+            lineStyle: {
+              color: rgba(INK, 0.18 + 0.28 * (link.value / peak)),
+              width: 1 + (3 * link.value) / peak,
+              curveness: 0.18,
+            },
+          })),
+          roam: false,
+          draggable: false,
+          force: {
+            repulsion: 220,
+            gravity: 0.08,
+            edgeLength: [48, 120] as [number, number],
+            friction: 0.4,
+          },
+          label: {
+            show: true,
+            color: INK,
+            fontSize: 10,
+            fontWeight: 500,
+            formatter: (p: { name: string }) =>
+              p.name.length > 16 ? `${p.name.slice(0, 15)}…` : p.name,
+          },
+          itemStyle: { borderWidth: 0 },
+          emphasis: { focus: "adjacency" as const, lineStyle: { width: 4 } },
+          blur: { itemStyle: { opacity: 0.2 }, lineStyle: { opacity: 0.06 } },
+        },
+      ],
+    },
+    media: [
+      { query: { maxWidth: NARROW }, option: { series: [{ label: { show: false } }] } },
+      { option: { series: [{ label: { show: true } }] } },
+    ],
+  };
+}
+
+function treeOption(frame: Frame, spec: PanelSpec): EChartsOption {
+  const scale = spec.value
+    ? measureScale(numbersAt(frame, spec.value), spec.format)
+    : 1;
+  const branches = asNodes(buildTree(frame, spec.path, spec.value, scale));
+  const data =
+    branches.length === 1
+      ? branches
+      : [{ name: "", value: branches.reduce((s, b) => s + b.value, 0), children: branches }];
+
+  return {
+    baseOption: {
+      ...BASE,
+      tooltip: {
+        ...CARD,
+        trigger: "item" as const,
+        formatter: (params: unknown) => {
+          const p = params as { name: string; value: number };
+          if (!p.name) return "";
+          return tip(p.name, [
+            { label: "Value", value: formatValue(p.value, spec.format) },
+          ]);
+        },
+      },
+      series: [
+        {
+          id: "nodes",
+          type: "tree" as const,
+          data,
+          top: 10,
+          bottom: 10,
+          left: 16,
+          right: 80,
+          orient: "LR" as const,
+          expandAndCollapse: false,
+          initialTreeDepth: -1,
+          symbol: "emptyCircle",
+          symbolSize: 8,
+          edgeShape: "curve" as const,
+          lineStyle: { color: LINE, width: 1.2, curveness: 0.5 },
+          itemStyle: { color: TONES.blue, borderColor: darken(TONES.blue), borderWidth: 1.4 },
+          label: {
+            color: INK,
+            fontSize: 10,
+            fontWeight: 500,
+            position: "right" as const,
+            formatter: (p: { name: string }) =>
+              p.name.length > 18 ? `${p.name.slice(0, 17)}…` : p.name,
+          },
+          leaves: {
+            label: { position: "right" as const },
+            itemStyle: { color: TONES.yellow, borderColor: darken(TONES.yellow) },
+          },
+          animationDelay: (idx: number) => Math.min(idx * 18, STAGGER_BUDGET_MS),
+          emphasis: { focus: "descendant" as const },
+          blur: { itemStyle: { opacity: 0.25 }, lineStyle: { opacity: 0.15 } },
+        },
+      ],
+    },
+    media: [
+      {
+        query: { maxWidth: NARROW },
+        option: { series: [{ right: 12, label: { show: false } }] },
+      },
+      { option: { series: [{ right: 80, label: { show: true } }] } },
+    ],
+  };
+}
+
+function themeRiverOption(frame: Frame, spec: PanelSpec): EChartsOption {
+  const xi = indexOf(frame, spec.x);
+  const yi = indexOf(frame, spec.y[0] ?? null);
+  const si = indexOf(frame, spec.series);
+  const scale = measureScale(numbersAt(frame, spec.y[0] ?? null), spec.format);
+
+  const data: [string, number, string][] = frame.rows.map((row) => [
+    String(row[xi] ?? ""),
+    toNumber(row[yi]) * scale,
+    String(row[si] ?? spec.y[0] ?? ""),
+  ]);
+
+  const names = unique(data.map((row) => String(row[2])));
+
+  return {
+    baseOption: {
+      ...BASE,
+      tooltip: {
+        ...CARD,
+        trigger: "axis" as const,
+        formatter: (params: unknown) => {
+          const rows = Array.isArray(params) ? params : [params];
+          const first = rows[0] as { value?: [string, number, string] };
+          const head = String(first.value?.[0] ?? "");
+          return tip(
+            head,
+            rows.map((row) => {
+              const p = row as { value: [string, number, string]; color: string };
+              return {
+                label: String(p.value[2] ?? ""),
+                value: formatValue(toNumber(p.value[1]), spec.format),
+                color: p.color,
+              };
+            }),
+          );
+        },
+      },
+      legend: legend(names.length > 1),
+      singleAxis: {
+        type: "time" as const,
+        top: names.length > 1 ? 28 : 10,
+        bottom: 8,
+        left: 12,
+        right: 12,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { show: false },
+        axisLabel: { color: MUTED, fontSize: 11, fontWeight: 500 },
+      },
+      series: [
+        {
+          id: "streams",
+          type: "themeRiver" as const,
+          data,
+          label: { show: false },
+          emphasis: { itemStyle: { shadowBlur: 8, shadowColor: rgba(INK, 0.12) } },
+          blur: { itemStyle: { opacity: 0.25 } },
+        },
+      ],
+    },
+    media: [
+      {
+        query: { maxWidth: NARROW },
+        option: { singleAxis: { axisLabel: { fontSize: 10 } } },
+      },
+      { option: { singleAxis: { axisLabel: { fontSize: 11 } } } },
+    ],
   };
 }
 

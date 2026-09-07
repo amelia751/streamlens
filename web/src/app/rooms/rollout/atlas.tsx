@@ -103,8 +103,8 @@ export function RolloutAtlas({
           value={category}
           onChange={(c) => go({ category: c })}
           options={[
-            { value: "Films", label: "Films" },
-            { value: "TV", label: "TV" },
+            { value: "Films", label: "Films", tone: "blue" },
+            { value: "TV", label: "TV", tone: "blue" },
           ]}
         />
         <SearchInput
@@ -160,7 +160,7 @@ export function RolloutAtlas({
           <Reveal delay={0.08}>
             <Panel
               title="Number one, by country"
-              subtitle="Who took the top slot where. Select any column to sort."
+              subtitle="Who took the top slot where."
             >
               <SortableTable
                 rows={numberOnes}

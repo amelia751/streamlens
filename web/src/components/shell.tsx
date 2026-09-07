@@ -32,11 +32,7 @@ export function Shell({
       {children}
 
       <footer className="site-foot">
-        Publicly observed and reconstructed data. Not Netflix ground truth.
-        Netflix Top 10 and engagement figures are published by Netflix; YouTube
-        statistics come from the YouTube Data API and are retained for 30 days
-        under the YouTube API Developer Policies. Ratios and per-clip figures
-        are computed by Streamlens and are not YouTube or Netflix metrics.
+        Publicly observed. Not Netflix ground truth.
       </footer>
     </div>
   );

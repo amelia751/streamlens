@@ -34,7 +34,7 @@ export default async function GlobalRollout({
     rows = c.rows;
   } catch (error) {
     return (
-      <Shell title="The Global Rollout" {...ROOMS.rollout}>
+      <Shell title="Rollout" {...ROOMS.rollout}>
         <ErrorNote error={error} />
       </Shell>
     );
@@ -42,8 +42,8 @@ export default async function GlobalRollout({
 
   return (
     <Shell
-      title="The Global Rollout"
-      lede="The Netflix Weekly Top 10 by country. A title that tops the chart in 60 countries is a different asset from one that tops it in three, and the country cut is where that difference shows."
+      title="Rollout"
+      lede="The Weekly Top 10 across 94 countries. Which titles travel, and which stay home."
       {...ROOMS.rollout}
     >
       <RolloutAtlas

@@ -3,7 +3,7 @@ import { Shell, ErrorNote } from "@/components/shell";
 import { Stat, Stats } from "@/components/charts";
 import { Reveal } from "@/components/motion";
 import { runQuery, compact, commas } from "@/lib/api";
-import { TONES, type Tone } from "@/lib/theme";
+import type { Tone } from "@/lib/theme";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +38,7 @@ const ROOMS: {
     href: "/studio",
     name: "Studio",
     blurb:
-      "The live warehouse and an analyst that builds dashboards from it. Open any table, or ask for a new view.",
+      "The warehouse, and what you build from it.",
     tone: "purple",
   },
 ];
@@ -59,7 +59,7 @@ export default async function Home() {
     <Shell
       title="What a studio promotes, against what actually performs"
       kicker="Overview"
-      lede="A studio-side view assembled from public sources into ClickHouse Cloud and read by a Gemini agent on Google Cloud."
+      lede="Three rooms over the public warehouse, and a studio that builds more."
     >
       <Stats>
         <Stat
@@ -89,13 +89,9 @@ export default async function Home() {
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
           {ROOMS.map((d) => (
             <Link key={d.href} href={d.href} className="dest-card">
-              <span
-                className="tone-bar"
-                style={{ background: TONES[d.tone] }}
-              />
+              <i className={`swatch tone-${d.tone}`} aria-hidden />
               <h2>{d.name}</h2>
               <p>{d.blurb}</p>
-              <span className="go">Open →</span>
             </Link>
           ))}
         </div>

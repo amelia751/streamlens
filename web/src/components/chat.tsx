@@ -141,10 +141,6 @@ export function Chat() {
       <div className="chat-log" ref={log}>
         {messages.length === 0 && (
           <div className="chat-intro">
-            <p>
-              Ask for a dashboard and it gets built on the canvas — queried,
-              checked against the schema, and saved.
-            </p>
             <ul className="chat-prompts">
               {PROMPTS.map((prompt) => (
                 <li key={prompt}>

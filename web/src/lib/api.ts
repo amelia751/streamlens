@@ -65,12 +65,31 @@ export type TablePreview = {
   limit: number;
 };
 
+/**
+ * Mirrors the backend chart registry in `dashboards/charts.py`.
+ *
+ * Adding a member here without a branch in the panel renderer is a build
+ * error, which is the point — see the switch in `components/panel.tsx`.
+ */
 export type ChartType =
   | "line"
   | "bar"
   | "area"
   | "scatter"
   | "pie"
+  | "funnel"
+  | "heatmap"
+  | "calendar"
+  | "treemap"
+  | "sunburst"
+  | "sankey"
+  | "boxplot"
+  | "map"
+  | "radar"
+  | "gauge"
+  | "graph"
+  | "tree"
+  | "themeRiver"
   | "table"
   | "stat";
 
@@ -82,12 +101,22 @@ export type ValueFormat =
   | "duration"
   | "currency";
 
-/** What a panel means. The renderer decides how it looks. */
+/**
+ * What a panel means. The renderer decides how it looks.
+ *
+ * Which channels matter is a property of `type`: a heatmap reads x, y and
+ * value, a sankey reads source, target and value. Panels saved before a
+ * channel existed simply leave it unset.
+ */
 export type PanelSpec = {
   type: ChartType;
   x: string | null;
   y: string[];
   series: string | null;
+  value: string | null;
+  path: string[];
+  source: string | null;
+  target: string | null;
   stacked: boolean;
   format: ValueFormat;
 };

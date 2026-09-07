@@ -181,7 +181,7 @@ export function GreenlightBoard({
       <Reveal className="mb-5">
         <Panel
           title="Push against outcome"
-          subtitle="Each dot is a title. Further right is more YouTube channels behind it; higher is more hours viewed, on a log scale. Dots below the median line returned less than half the catalogue despite their push."
+          subtitle="Channels behind a title vs hours viewed."
         >
           <MismatchScatter points={scatter} onSelectTitle={open} />
         </Panel>
@@ -210,7 +210,7 @@ export function GreenlightBoard({
         <Reveal delay={0.1}>
           <Panel
             title="Most reach per clip"
-            subtitle="Hours viewed divided by promo clips, among titles that charted at least three weeks. A Streamlens ratio, not a Netflix or YouTube metric."
+            subtitle="Hours viewed per promo clip, among titles that charted three weeks."
           >
             <BarList
               tone="green"
@@ -229,7 +229,7 @@ export function GreenlightBoard({
       <Reveal delay={0.14}>
         <Panel
           title="Campaign board"
-          subtitle="Select any column to sort. Select a title to open its dossier."
+          subtitle="Select a title to open its dossier."
         >
           <SortableTable
             rows={rows}

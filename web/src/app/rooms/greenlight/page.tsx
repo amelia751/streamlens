@@ -19,7 +19,7 @@ export default async function GreenlightRoom() {
     categories = f.rows.map((r) => str(r.category)).filter(Boolean);
   } catch (error) {
     return (
-      <Shell title="The Greenlight Room" {...ROOMS.greenlight}>
+      <Shell title="Greenlight" {...ROOMS.greenlight}>
         <ErrorNote error={error} />
       </Shell>
     );
@@ -27,8 +27,8 @@ export default async function GreenlightRoom() {
 
   return (
     <Shell
-      title="The Greenlight Room"
-      lede="Every title Netflix promoted on YouTube, set against how it actually performed in the Weekly Top 10. The question this answers is whether the promotional push matched the outcome — and where it did not."
+      title="Greenlight"
+      lede="Promotional push against Top 10 outcome, title by title."
       {...ROOMS.greenlight}
     >
       <GreenlightBoard board={board} categories={categories} />

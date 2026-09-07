@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 from streamlens.dashboards import charts, store
-from streamlens.dashboards.spec import CHART_TYPES, SpecError
+from streamlens.dashboards.spec import SpecError
 
 CHART_TYPE_HELP = charts.type_list()
 
@@ -43,6 +43,10 @@ def _spec(
     x: str,
     y: list[str],
     series: str,
+    value: str,
+    path: list[str],
+    source: str,
+    target: str,
     stacked: bool,
     value_format: str,
 ) -> dict:
@@ -51,6 +55,10 @@ def _spec(
         "x": x or None,
         "y": y or [],
         "series": series or None,
+        "value": value or None,
+        "path": path or [],
+        "source": source or None,
+        "target": target or None,
         "stacked": stacked,
         "format": value_format or "number",
     }
@@ -161,6 +169,10 @@ def add_panel(
     x: str = "",
     y: list[str] | None = None,
     series: str = "",
+    value: str = "",
+    path: list[str] | None = None,
+    source: str = "",
+    target: str = "",
     stacked: bool = False,
     value_format: str = "number",
     width: int = 6,
@@ -168,36 +180,58 @@ def add_panel(
 ) -> dict[str, Any]:
     """Add a panel to a dashboard.
 
-    The query is run before the panel is saved and the columns it returns are
-    checked against x, y and series. If any of them is missing the panel is
-    NOT saved and the problems are returned along with the real column list.
+    The query is run before the panel is saved and every column it names is
+    checked against what the query actually returned. If any is missing the
+    panel is NOT saved and the problems come back with the real column list.
 
     Args:
         dashboard_id: the dashboard to add to.
         title: the panel's title.
         query: a single SELECT returning the columns named below. Keep it
-            aggregated — a panel plots at most a few thousand points.
-        chart_type: which chart to draw. Leave a column argument as "" when
-            the type below does not take it.
+            aggregated — a panel plots at most a few thousand points. The
+            exception is boxplot, which wants the raw rows.
+        chart_type: which chart to draw. Each type below lists the columns it
+            takes; leave the others as "".
             {charts}
-        x: the column on the horizontal axis, usually a date.
-        y: the measure columns to plot.
+        x: the main dimension — the horizontal axis on a cartesian chart, the
+            category on a funnel, the country on a map.
+        y: the measure columns to plot, or the second dimension on a heatmap.
         series: optional column to split one measure into several lines or
             bars, e.g. "channel". Do not combine with several y columns.
+        value: the single measure for charts whose dimensions occupy other
+            slots — heatmap, calendar, treemap, sunburst, sankey, map, graph
+            and tree.
+        path: the columns forming a hierarchy for treemap and sunburst,
+            outermost first, e.g. ["genre", "title"].
+        source: the column a sankey flow leaves.
+        target: the column a sankey flow arrives at.
         stacked: stack the series instead of overlaying them.
         value_format: number, compact, percent, bytes, duration or currency.
         width: grid width out of 12. Use 12 for a full-width time series,
             6 for a half, 3 for a small stat.
-        height: 1, 2 or 3 rows tall.
+        height: 1, 2 or 3 rows tall. Give a map, treemap, calendar, radar,
+            graph, tree or themeRiver 2.
     """
-    if chart_type not in CHART_TYPES:
+    kind = charts.chart(chart_type)
+    if kind is None:
         return _failed(f"unknown chart_type {chart_type!r}; use one of {CHART_TYPE_HELP}")
     try:
         return store.add_panel(
             dashboard_id,
             title,
             query,
-            _spec(chart_type, x, y or [], series, stacked, value_format),
+            _spec(
+                kind.name,
+                x,
+                y or [],
+                series,
+                value,
+                path or [],
+                source,
+                target,
+                stacked,
+                value_format,
+            ),
             width=width,
             height=height,
         )
@@ -215,6 +249,10 @@ def update_panel(
     x: str = "",
     y: list[str] | None = None,
     series: str = "",
+    value: str = "",
+    path: list[str] | None = None,
+    source: str = "",
+    target: str = "",
     stacked: bool = False,
     value_format: str = "",
     width: int = 0,
@@ -235,9 +273,13 @@ def update_panel(
         query: new SELECT, or "".
         chart_type: new chart type, or "" to keep the current one.
             {charts}
-        x: horizontal axis column, used when chart_type is given.
+        x: main dimension column, used when chart_type is given.
         y: measure columns, used when chart_type is given.
         series: split column, used when chart_type is given.
+        value: single measure column, used when chart_type is given.
+        path: hierarchy columns, used when chart_type is given.
+        source: flow origin column, used when chart_type is given.
+        target: flow destination column, used when chart_type is given.
         stacked: stack the series, used when chart_type is given.
         value_format: number, compact, percent, bytes, duration or currency.
         width: new grid width out of 12, or 0.
@@ -246,12 +288,22 @@ def update_panel(
     """
     spec_raw = None
     if chart_type:
-        if chart_type not in CHART_TYPES:
+        kind = charts.chart(chart_type)
+        if kind is None:
             return _failed(
                 f"unknown chart_type {chart_type!r}; use one of {CHART_TYPE_HELP}"
             )
         spec_raw = _spec(
-            chart_type, x, y or [], series, stacked, value_format or "number"
+            kind.name,
+            x,
+            y or [],
+            series,
+            value,
+            path or [],
+            source,
+            target,
+            stacked,
+            value_format or "number",
         )
 
     try:

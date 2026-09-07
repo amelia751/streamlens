@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts";
 
 import type { ChartType, Panel, PanelData, ValueFormat } from "@/lib/api";
+import { loadWorldAtlas, type WorldAtlas } from "@/lib/atlas";
 import { chartOption, formatValue, statNumber, statValue } from "@/lib/chart";
 
 function useResize(
@@ -29,9 +30,37 @@ function useResize(
   }, [ref, chart]);
 }
 
+/**
+ * The world geometry, for map panels only.
+ *
+ * Returns undefined until it has loaded. Nothing else needs it, so no other
+ * panel pays for the fetch.
+ */
+function useAtlas(kind: ChartType) {
+  const [atlas, setAtlas] = useState<WorldAtlas>();
+  const [failed, setFailed] = useState<string>();
+
+  useEffect(() => {
+    if (kind !== "map") return;
+    let dropped = false;
+
+    loadWorldAtlas()
+      .then((loaded) => !dropped && setAtlas(loaded))
+      .catch((e: unknown) => !dropped && setFailed(String(e)));
+
+    return () => {
+      dropped = true;
+    };
+  }, [kind]);
+
+  return { atlas, failed };
+}
+
 function Chart({ data }: { data: PanelData }) {
   const box = useRef<HTMLDivElement>(null);
   const [chart, setChart] = useState<echarts.ECharts | null>(null);
+  const kind = data.panel.spec.type;
+  const { atlas, failed } = useAtlas(kind);
 
   useEffect(() => {
     if (!box.current) return;
@@ -46,13 +75,19 @@ function Chart({ data }: { data: PanelData }) {
 
   useEffect(() => {
     if (!chart) return;
+    // Drawing a map before the geometry arrives would register an empty
+    // one, and ECharts caches that by name for every later panel.
+    if (kind === "map" && !atlas) return;
+
     chart.setOption(
-      chartOption({ columns: data.columns, rows: data.rows }, data.panel.spec),
+      chartOption({ columns: data.columns, rows: data.rows }, data.panel.spec, atlas),
       // Replace rather than merge: an edited panel can have fewer series
       // than it did, and a merge would leave the old ones drawn.
       { notMerge: true },
     );
-  }, [chart, data]);
+  }, [chart, data, kind, atlas]);
+
+  if (failed) return <p className="tile-error">Could not load the world map: {failed}</p>;
 
   return <div className="tile-chart" ref={box} />;
 }
@@ -111,6 +146,19 @@ function TileBody({ kind, data }: { kind: ChartType; data: PanelData }) {
     case "bar":
     case "scatter":
     case "pie":
+    case "funnel":
+    case "heatmap":
+    case "calendar":
+    case "treemap":
+    case "sunburst":
+    case "sankey":
+    case "boxplot":
+    case "map":
+    case "radar":
+    case "gauge":
+    case "graph":
+    case "tree":
+    case "themeRiver":
       return <Chart data={data} />;
     default: {
       // Unreachable while every member of ChartType has a case above, which

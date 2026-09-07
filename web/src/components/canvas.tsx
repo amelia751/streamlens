@@ -128,15 +128,13 @@ export function Canvas() {
   if (tabs.length === 0) {
     return (
       <div className="canvas-empty">
-        <p className="kicker">
-          <i className="tone-dot" style={{ background: "var(--purple)" }} />
-          Studio
-        </p>
-        <h1>The warehouse, and what you build from it</h1>
-        <p className="lede">
-          Dashboards you have asked for, and the tables they read. Open a
-          table to inspect it, or ask the analyst to build a new view.
-        </p>
+        <div className="canvas-empty-marks" aria-hidden>
+          <i className="tone-yellow" />
+          <i className="tone-blue" />
+          <i className="tone-green" />
+          <i className="tone-purple" />
+        </div>
+        <p>Get started by creating dashboards</p>
       </div>
     );
   }
