@@ -226,9 +226,9 @@ export function ProposalView({ proposalId }: { proposalId: string }) {
           </div>
         </section>
         <section className="report-pane">
-          <h3>Story</h3>
-          <div className="report-pane-body report-story">
-            {proposal.story
+          <h3>Theme</h3>
+          <div className="report-pane-body report-theme">
+            {proposal.theme
               .split(/\n\n+/)
               .filter(Boolean)
               .map((para) => (

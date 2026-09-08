@@ -38,7 +38,7 @@ from streamlens.services.clickhouse.catalog import (
     read_catalog,
     read_table_preview,
 )
-from streamlens.services.clickhouse.client import shared_client
+from streamlens.services.clickhouse.clickhouse_services import shared_client
 from streamlens.services.clickhouse.sources import read_sources
 
 log = logging.getLogger(__name__)
@@ -234,7 +234,7 @@ class ProposalBody(BaseModel):
     hook: str = ""
     logline: str = ""
     connection: str = ""
-    story: str = ""
+    theme: str = ""
     market: str = ""
     archetypes: list[ArchetypeBody] = []
     source_dashboard_id: str = ""
@@ -317,7 +317,7 @@ def proposal_still(proposal_id: str, still_id: str) -> Response:
     """
     from streamlens.proposals import stills as proposal_stills
     from streamlens.proposals import store as proposal_store
-    from streamlens.services.gcp.storage import StorageError
+    from streamlens.services.gcp.gcp_services import StorageError
 
     try:
         data, content_type = proposal_stills.read_still(proposal_id, still_id)

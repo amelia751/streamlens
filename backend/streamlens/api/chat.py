@@ -19,7 +19,9 @@ from google.genai import types
 
 log = logging.getLogger(__name__)
 
-APP_NAME = "streamlens"
+# Sessions are keyed by app name, and the Runner takes the name from the
+# App, so these have to be the same string. Imported rather than repeated.
+from streamlens.agents.analyst.agent import APP_NAME  # noqa: E402
 
 # Tools that change what is on the canvas. Anything here triggers a refetch.
 MUTATING = {
@@ -144,12 +146,13 @@ async def stream_turn(
     Reconnecting costs a second or two against a turn that runs for a minute,
     which is a good trade for never serving a stale session.
     """
-    from streamlens.agents.analyst import build_agent, build_toolsets
+    from streamlens.agents.analyst import build_app, build_toolsets
 
     toolsets = build_toolsets()
+    # The App rather than the bare agent, so the browser gets the same
+    # context caching the terminal runner measures.
     runner = Runner(
-        agent=build_agent(toolsets),
-        app_name=APP_NAME,
+        app=build_app(toolsets),
         session_service=_sessions,
     )
 

@@ -93,19 +93,16 @@ def gather(client, title: str) -> dict[str, Any]:
 
 
 def write_brief(client, title: str) -> Brief:
-    from google import genai
+    """Synthesise the brief from evidence the model did not choose.
+
+    The Vertex call goes through `services.gcp.gcp_services`, which is the
+    only place in the codebase that constructs a Google client.
+    """
+    from streamlens.services.gcp.gcp_services import generate_brief_text
 
     evidence = gather(client, title)
-    settings = google_cloud_settings()
-    settings.apply_defaults()
-
-    genai_client = genai.Client(**settings.client_kwargs)
-    response = genai_client.models.generate_content(
-        model=settings.model,
-        contents=(
-            f"{INSTRUCTION}\n\nEvidence for {title!r}:\n"
-            f"{json.dumps(evidence, indent=2, default=str)}"
-        ),
-        config=types.GenerateContentConfig(temperature=0.2),
+    text = generate_brief_text(
+        f"{INSTRUCTION}\n\nEvidence for {title!r}:\n"
+        f"{json.dumps(evidence, indent=2, default=str)}"
     )
-    return Brief(title=title, evidence=evidence, text=(response.text or "").strip())
+    return Brief(title=title, evidence=evidence, text=text.strip())

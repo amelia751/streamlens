@@ -83,13 +83,32 @@ def warehouse_overview() -> dict[str, Any]:
         return _failed(str(exc))
 
 
+# A result at or under this many rows comes back whole. Above it, the model
+# gets a glance and a sample instead.
+#
+# The number is the point of the tool. Capped at a dozen rows, `preview_query`
+# was useless for "rank these twenty markets", so the model reached for the
+# raw ClickHouse `run_query` for everything and never saw a glance at all.
+# Sixty covers a Top 10 by category, a market list, a genre breakdown — the
+# results you actually want to read — while still refusing to page a million
+# rows through the context window.
+PREVIEW_WHOLE_ROWS = 60
+
+
 def preview_query(query: str) -> dict[str, Any]:
     """Run a SELECT and see what it returns, without saving anything.
 
-    Prefer this over a second identical ClickHouse query when you are about
-    to draw a chart. `glance` has first/last rows and min/max so you can
-    caption from this result. Do not preview and then add the same SELECT
-    — add_panel returns the same glance.
+    This is the tool to reach for whenever you write a SELECT. A result of
+    {whole} rows or fewer comes back in full under `rows`; anything larger
+    comes back as `sample_rows` plus a `glance` — first and last row, min
+    and max on every number, example values on everything else — which is
+    what you should caption from.
+
+    Use ClickHouse `run_query` only for what this refuses: something that is
+    not a single SELECT, or a result so large you genuinely need to page it.
+
+    Do not preview and then add the same SELECT — `add_panel` returns the
+    same glance.
 
     Args:
         query: a single SELECT (or WITH ... SELECT) statement.
@@ -98,14 +117,24 @@ def preview_query(query: str) -> dict[str, Any]:
         result = store.run_panel_query(query, limit=200)
     except store.DashboardError as exc:
         return _failed(str(exc))
-    return {
+
+    rows = result["rows"]
+    body: dict[str, Any] = {
         "ok": True,
         "columns": result["columns"],
         "types": result["types"],
-        "sample_rows": result["rows"][:12],
-        "row_count": len(result["rows"]),
-        "glance": glance(result["columns"], result["types"], result["rows"]),
+        "row_count": len(rows),
+        "glance": glance(result["columns"], result["types"], rows),
     }
+    if len(rows) <= PREVIEW_WHOLE_ROWS:
+        body["rows"] = rows
+    else:
+        body["sample_rows"] = rows[:12]
+        body["truncated"] = (
+            f"showing 12 of {len(rows)} rows; read `glance` for the shape, "
+            "or aggregate the query further"
+        )
+    return body
 
 
 def read_panels(dashboard_id: str, panel_id: str = "") -> dict[str, Any]:
@@ -405,6 +434,11 @@ def delete_panel(dashboard_id: str, panel_id: str) -> dict[str, Any]:
     except store.DashboardError as exc:
         return _failed(str(exc))
     return {"ok": True, "deleted": panel_id}
+
+
+preview_query.__doc__ = (preview_query.__doc__ or "").replace(
+    "{whole}", str(PREVIEW_WHOLE_ROWS)
+)
 
 
 # The full surface, in the order a model would normally reach for them.

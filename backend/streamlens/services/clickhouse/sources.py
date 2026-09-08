@@ -18,7 +18,7 @@ from streamlens.services.clickhouse.catalog import (
     last_youtube_sync,
     table_rows_index,
 )
-from streamlens.services.clickhouse.cloud import list_clickpipes
+from streamlens.services.clickhouse.clickhouse_services import list_clickpipes
 
 SOURCE_KIND_LABELS = {
     "objectStorage": "ClickPipes",

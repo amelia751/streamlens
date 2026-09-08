@@ -7,6 +7,7 @@ dependencies = [
     "google-adk[mcp]>=2.8.0",
     "mcp>=1.24,<2",
     "google-cloud-storage>=2.19.0",
+    "google-cloud-secret-manager>=2.20.0",
     "clickhouse-connect>=1.8.0",
     "python-dotenv>=1.0.1",
     "fastapi>=0.115.0",

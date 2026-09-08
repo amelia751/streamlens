@@ -45,7 +45,7 @@ from streamlens.proposals.spec import (
     parse_doc,
     validate_doc,
 )
-from streamlens.services.clickhouse.client import shared_client
+from streamlens.services.clickhouse.clickhouse_services import shared_client
 
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
@@ -55,7 +55,7 @@ ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 
 PROPOSAL_COLUMNS = [
     "id", "title", "genre", "kicker", "budget", "hook", "logline",
-    "connection", "story", "market", "archetypes",
+    "connection", "theme", "market", "archetypes",
     "source_dashboard_id", "source_dashboard_title",
     "updated_at", "is_deleted",
 ]
@@ -257,7 +257,7 @@ def get_proposal(proposal_id: str) -> Proposal:
     client = shared_client()
     head = client.query(
         "SELECT id, title, genre, kicker, budget, hook, logline, connection, "
-        "story, market, archetypes, source_dashboard_id, source_dashboard_title "
+        "theme, market, archetypes, source_dashboard_id, source_dashboard_title "
         "FROM streamlens.proposal FINAL "
         "WHERE id = {id:String} AND is_deleted = 0",
         parameters={"id": proposal_id},
@@ -279,7 +279,7 @@ def get_proposal(proposal_id: str) -> Proposal:
         hook=row[5],
         logline=row[6],
         connection=row[7],
-        story=row[8],
+        theme=row[8],
         market=row[9],
         archetypes=[
             Archetype(name=str(a.get("name", "")), note=str(a.get("note", "")))
@@ -367,7 +367,7 @@ def _write_doc(
             doc.hook,
             doc.logline,
             doc.connection,
-            doc.story,
+            doc.theme,
             doc.market,
             json.dumps([a.to_dict() for a in doc.archetypes]),
             source_dashboard_id,
@@ -475,7 +475,7 @@ def delete_proposal(proposal_id: str) -> dict[str, int]:
         "INSERT INTO streamlens.proposal "
         f"({', '.join(PROPOSAL_COLUMNS)}) "
         "SELECT id, title, genre, kicker, budget, hook, logline, connection, "
-        "story, market, archetypes, source_dashboard_id, "
+        "theme, market, archetypes, source_dashboard_id, "
         "source_dashboard_title, now64(3, 'UTC'), 1 "
         "FROM streamlens.proposal FINAL "
         "WHERE id = {id:String} AND is_deleted = 0",

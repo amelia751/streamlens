@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS streamlens.proposal
     hook        String,
     logline     String,
     connection  String,
-    story       String,
+    theme       String,
     market      String,
 
     -- [{name, note}] as JSON. A fixed-shape list of two short strings does

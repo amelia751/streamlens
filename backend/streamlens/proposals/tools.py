@@ -29,11 +29,13 @@ from streamlens.dashboards.store import DashboardError, run_panel_query
 from streamlens.dashboards.tools import _documents_charts, _spec
 from streamlens.proposals import stills, store
 from streamlens.proposals.spec import (
+    ARCHETYPE_NOTE_MAX,
+    LIMITS,
     MAX_ARCHETYPES,
     ProposalSpecError,
     genre_list,
 )
-from streamlens.services.gcp.images import ASPECT_RATIOS
+from streamlens.services.gcp.gcp_services import ASPECT_RATIOS
 
 CHART_TYPE_HELP = charts.type_list()
 GENRE_HELP = genre_list()
@@ -132,36 +134,46 @@ def create_proposal(
     hook: str,
     logline: str,
     connection: str,
-    story: str,
+    theme: str,
     market: str,
     archetype_names: list[str] | None = None,
     archetype_notes: list[str] | None = None,
 ) -> dict[str, Any]:
     """Write a theme proposal and return its id.
 
-    Every field lands in a fixed place on the one-sheet, so each one has a
-    length the page can hold. If something is too long the proposal is NOT
-    saved and the limit comes back — cut it rather than trying again with
-    the same text.
+    Every field lands in a fixed place on the one-sheet, so each has a hard
+    character limit — stated per argument below, and counted on the way in.
+    Write to the limit the first time. If something is over, the proposal is
+    NOT saved and the overage comes back; cut it rather than resending.
+
+    Write about the film, not to the filmmaker. "A thriller that only works
+    after midnight" is the register. "Do not pitch a franchise", "Keep the
+    runtime lean", and any other instruction aimed at the reader is not —
+    the reader is the person pitching this, and they are holding a
+    one-sheet, not your notes.
 
     Put charts on it afterwards with adopt_panel.
 
     Args:
-        title: the working title. Short enough to sit over a still.
+        title: the working title. Short enough to sit over a still. {cap_title}
         genre: one of {genres}. It colours the whole page.
         kicker: the angle in three or four words, e.g. "Late-night window".
-        budget: a band, e.g. "$18-28M". Not a single figure.
-        hook: one sentence, over the still. What the film is.
-        logline: one or two sentences. The pitch itself.
+            {cap_kicker}
+        budget: a band, e.g. "$18-28M". Not a single figure. {cap_budget}
+        hook: one sentence, over the still. What the film is. {cap_hook}
+        logline: one or two sentences. The pitch itself. {cap_logline}
         connection: what the warehouse finding has to do with the idea.
-        story: two or three short paragraphs, separated by blank lines. A
-            theme and a shape, not a plot.
+            {cap_connection}
+        theme: what the film is *about* — the idea underneath the plot, in
+            two short paragraphs separated by a blank line. A theme and a
+            shape, not a synopsis and not a list of directives. {cap_theme}
         market: the argument the charts underneath are making. Every figure
             here must come from a panel on this proposal or a query you ran.
+            {cap_market}
         archetype_names: the cast, as roles rather than names — "The
             uploader", "The regular". Read pairwise with archetype_notes.
         archetype_notes: one line each, same length and order as
-            archetype_names. Two to {max_cast} of them.
+            archetype_names. Two to {max_cast} of them, {cap_note} each.
     """
     try:
         archetypes = _archetypes(archetype_names or [], archetype_notes or [])
@@ -177,16 +189,28 @@ def create_proposal(
             "hook": hook,
             "logline": logline,
             "connection": connection,
-            "story": story,
+            "theme": theme,
             "market": market,
             "archetypes": archetypes,
         }
     )
 
 
-create_proposal.__doc__ = (create_proposal.__doc__ or "").replace(
-    "{max_cast}", str(MAX_ARCHETYPES)
-)
+def _documents_limits(doc: str) -> str:
+    """Write each field's character cap into the docstring.
+
+    Taken from `spec.LIMITS`, which is what validation reads — so the model
+    is never told a budget the validator would reject. Stating the number
+    matters: without it the model overshoots, gets an `ok: false`, and
+    spends a code-sandbox call counting characters to recover.
+    """
+    for field, (cap, _) in LIMITS.items():
+        doc = doc.replace(f"{{cap_{field}}}", f"At most {cap} characters.")
+    doc = doc.replace("{cap_note}", f"at most {ARCHETYPE_NOTE_MAX} characters")
+    return doc.replace("{max_cast}", str(MAX_ARCHETYPES))
+
+
+create_proposal.__doc__ = _documents_limits(create_proposal.__doc__ or "")
 
 
 @_documents_genres
@@ -199,7 +223,7 @@ def update_proposal(
     hook: str = "",
     logline: str = "",
     connection: str = "",
-    story: str = "",
+    theme: str = "",
     market: str = "",
     archetype_names: list[str] | None = None,
     archetype_notes: list[str] | None = None,
@@ -217,7 +241,7 @@ def update_proposal(
         hook: new hook, or "".
         logline: new logline, or "".
         connection: new connection, or "".
-        story: new story, or "".
+        theme: new theme, or "".
         market: new market section, or "".
         archetype_names: the whole cast again, or omit to keep it.
         archetype_notes: same length and order as archetype_names.
@@ -230,7 +254,7 @@ def update_proposal(
         "hook": hook,
         "logline": logline,
         "connection": connection,
-        "story": story,
+        "theme": theme,
         "market": market,
     }
     if archetype_names or archetype_notes:
@@ -245,6 +269,9 @@ def update_proposal(
         return store.update_proposal(proposal_id, changes)
     except store.ProposalError as exc:
         return _failed(str(exc))
+
+
+update_proposal.__doc__ = _documents_limits(update_proposal.__doc__ or "")
 
 
 def adopt_panel(

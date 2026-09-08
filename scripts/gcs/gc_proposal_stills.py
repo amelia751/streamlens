@@ -26,8 +26,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "backend"))
 
 from streamlens.config import proposal_settings  # noqa: E402
-from streamlens.services.clickhouse.client import shared_client  # noqa: E402
-from streamlens.services.gcp import storage  # noqa: E402
+from streamlens.services.clickhouse.clickhouse_services import (  # noqa: E402
+    shared_client,
+)
+from streamlens.services.gcp import gcp_services  # noqa: E402
 
 PREFIX = "proposals/"
 
@@ -42,7 +44,7 @@ def live_objects() -> set[str]:
 
 def main(delete: bool) -> None:
     settings = proposal_settings()
-    keys = storage.list_keys(PREFIX)
+    keys = gcp_services.list_keys(PREFIX)
     live = live_objects()
     orphans = sorted(k for k in keys if k not in live)
 
@@ -54,7 +56,7 @@ def main(delete: bool) -> None:
 
     for key in orphans:
         if delete:
-            storage.delete_object(key)
+            gcp_services.delete_object(key)
             print(f"  deleted {key}")
         else:
             print(f"  would delete {key}")

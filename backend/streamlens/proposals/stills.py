@@ -3,7 +3,7 @@
 The model passes a sentence. It does not pass — and cannot influence — the
 bucket, the key, the content type, the size, or the URL the image is later
 served from. Everything on that side is derived here and in
-`services.gcp.storage`.
+`services.gcp.gcp_services`.
 
 Two things are enforced rather than requested:
 
@@ -28,7 +28,7 @@ from typing import Any
 
 from streamlens.config import proposal_settings
 from streamlens.proposals import store
-from streamlens.services.gcp import images, storage
+from streamlens.services.gcp import gcp_services
 
 log = logging.getLogger(__name__)
 
@@ -81,10 +81,10 @@ def generate_still(
         return {"ok": False, "problems": ["a still needs a prompt"]}
 
     try:
-        data, mime, model = images.generate_image(
+        data, mime, model = gcp_services.generate_image(
             _prompt_for(prompt), aspect_ratio
         )
-    except images.ImageError as exc:
+    except gcp_services.ImageError as exc:
         log.warning("still generation refused for %s: %s", proposal_id, exc)
         return {"ok": False, "problems": [str(exc)]}
 
@@ -98,9 +98,9 @@ def generate_still(
         }
 
     try:
-        still_id, key = storage.still_key(proposal_id)
-        storage.put_object(key, data, mime)
-    except storage.StorageError as exc:
+        still_id, key = gcp_services.still_key(proposal_id)
+        gcp_services.put_object(key, data, mime)
+    except gcp_services.StorageError as exc:
         log.exception("could not store a still for %s", proposal_id)
         return {"ok": False, "problems": [str(exc)]}
 
@@ -136,4 +136,4 @@ def read_still(proposal_id: str, still_id: str) -> tuple[bytes, str]:
     still that was never recorded is not reachable at all.
     """
     still = store.get_still(proposal_id, still_id)
-    return storage.read_object(still.object), still.content_type
+    return gcp_services.read_object(still.object), still.content_type

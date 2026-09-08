@@ -10,7 +10,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
 
-from streamlens.services.clickhouse.client import shared_client
+from streamlens.services.clickhouse.clickhouse_services import shared_client
 
 HIDDEN_DATABASES = ("system", "INFORMATION_SCHEMA", "information_schema")
 
@@ -163,6 +163,77 @@ def read_table_preview(database: str, table: str, limit: int) -> dict:
 # brief names the tables so the agent does not waste a list_tables on them.
 _STORE_DATABASES = frozenset({"streamlens"})
 
+# What a column list does not say.
+#
+# Every entry here is a property of the data, not advice about a question:
+# a grain that is finer than people assume, a type that is not what its name
+# suggests, a null that does not mean zero, a coverage figure that makes
+# "absent" and "did not happen" different claims. A model reading only
+# `view_count:Nullable(UInt64)` will average the nulls as zero and multiply
+# duration by views to get "watch time"; both are wrong, and neither is
+# discoverable from the schema.
+#
+# Keep these factual. Anything that reads as "for question X, join Y" does
+# not belong here — that is the model's job.
+_CAVEATS: dict[str, str] = {
+    "landing.netflix_top10_countries": (
+        "weekly_rank only — there are NO hours at country grain. Hours exist "
+        "globally in netflix_top10_global and all-time in "
+        "netflix_top10_most_popular. Country is the finest geography there "
+        "is; nothing is sub-national."
+    ),
+    "landing.netflix_top10_global": (
+        "the only weekly hours in the warehouse. `runtime` is the published "
+        "runtime of titles that actually charted."
+    ),
+    "landing.imdb_title_basics": (
+        "runtimeMinutes, startYear and endYear are String, with '\\N' for "
+        "missing — cast them and handle '\\N', or averages silently drop or "
+        "error. No key joins IMDb to Netflix; exact title matching lands "
+        "about 83% of Netflix TV titles, and the miss has to be stated."
+    ),
+    "landing.imdb_title_akas": (
+        "`language` and `region` are the only language dimension anywhere in "
+        "the warehouse. Netflix data carries no language at all."
+    ),
+    "landing.vod_clickstream": (
+        "671,736 UK desktop sessions, 2017-2019. Real session duration and "
+        "hour-of-day, but not current, not global and not mobile."
+    ),
+    "landing.movielens_ratings": (
+        "32M rows, ending 2023-10-13. Aggregate before joining anything to "
+        "it; the query ceiling is 30 seconds."
+    ),
+    "landing.movielens_genome_scores": (
+        "18.5M rows over 1,128 tags. Aggregate before joining."
+    ),
+    "landing.imdb_title_principals": (
+        "101.6M rows, the largest table here. Filter by category and "
+        "aggregate per person before joining; a per-person average needs a "
+        "minimum title count or single-title flukes win."
+    ),
+    "youtube.video_stats_daily": (
+        "ONE snapshot day, not a time series — there is no growth curve for "
+        "any video. Cadence over time comes from video.published_at."
+    ),
+    "youtube.video_stats": (
+        "view_count, like_count and comment_count are Nullable because "
+        "YouTube returns ABSENT when a creator hides them; averaging nulls "
+        "as zero corrupts every rate. duration_s * view_count is NOT watch "
+        "time — it assumes every viewer finished, which nothing measures."
+    ),
+    "youtube.promo_top10_bridge": (
+        "links 1,180 of 3,428 Top 10 titles by substring match. A title "
+        "absent from the bridge was not matched, which is not the same "
+        "claim as not promoted."
+    ),
+    "youtube.channel": (
+        "44 channels. Several are regional aggregates — one channel covers "
+        "NORDIC, BENELUX, MENA, LATAM or all of Africa — so 'no channel' "
+        "and 'no promotion in that market' are different claims."
+    ),
+}
+
 
 def read_schema_brief() -> dict:
     """One compact look at every data table: columns, types, row counts.
@@ -206,9 +277,12 @@ def read_schema_brief() -> dict:
             "kind": _classify(name, engine),
         }
         if database in _STORE_DATABASES:
-            entry["note"] = "dashboard definitions, not a dataset"
+            entry["note"] = "dashboard and proposal definitions, not a dataset"
         else:
             entry["columns"] = cols_by_table.get((database, name), [])
+            caveat = _CAVEATS.get(f"{database}.{name}")
+            if caveat:
+                entry["caveat"] = caveat
         databases.setdefault(database, []).append(entry)
 
     return {

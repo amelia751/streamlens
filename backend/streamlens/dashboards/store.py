@@ -21,7 +21,10 @@ from typing import Any
 from streamlens.dashboards.glance import glance
 from streamlens.dashboards.spec import PanelSpec, parse_spec, validate_spec
 from streamlens.services.clickhouse.catalog import _cell
-from streamlens.services.clickhouse.client import reader_client, shared_client
+from streamlens.services.clickhouse.clickhouse_services import (
+    run_read_only,
+    shared_client,
+)
 
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
@@ -29,11 +32,46 @@ SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 _READ_ONLY_START = re.compile(r"^\s*(select|with)\b", re.IGNORECASE)
 
 PANEL_ROW_LIMIT = 5000
-QUERY_TIMEOUT_SECONDS = 30
 
 
 class DashboardError(ValueError):
     """Raised with a message written to be read by the model."""
+
+
+def _explain(exc: Exception) -> str:
+    """Turn a ClickHouse error into something the model can act on.
+
+    A privilege error is not a bug to retry — it is the boundary answering,
+    and the useful reply is what to do instead. Left raw, the model reads a
+    server traceback about grants and tries variations of the same query.
+    Timeouts are the other one worth naming: the fix is always to aggregate
+    further, never to run it again.
+    """
+    text = str(exc)
+    if "ACCESS_DENIED" in text or "Not enough privileges" in text:
+        return (
+            "that is outside what the analyst identity can read. It holds "
+            "SELECT on `landing` and `youtube` only — not on `streamlens` "
+            "(which is where dashboards and proposals are stored, not data), "
+            "and not on `system` or `information_schema` beyond the catalog "
+            "`warehouse_overview` already gave you. Answer from the brief, or "
+            "from landing/youtube."
+        )
+    if "TIMEOUT_EXCEEDED" in text or "Timeout exceeded" in text:
+        return (
+            "the query took longer than the 30 second ceiling. Aggregate each "
+            "side down before joining rather than joining raw rows — the large "
+            "tables here are imdb_title_principals (101M), movielens_ratings "
+            "(32M) and movielens_genome_scores (18M). Running it again "
+            "unchanged will time out again."
+        )
+    if "TOO_MANY_ROWS" in text or "max_result_rows" in text:
+        return (
+            "that returns more rows than a chart can use. Group it further, or "
+            "add a LIMIT with an ORDER BY so the rows you keep are the ones "
+            "you meant."
+        )
+    return f"query failed: {text}"
 
 
 @dataclass
@@ -119,22 +157,14 @@ def run_panel_query(query: str, limit: int = PANEL_ROW_LIMIT) -> dict[str, Any]:
             "a panel query must be a single SELECT (or WITH ... SELECT) statement"
         )
 
-    # The reader identity cannot write at all; readonly and the ceilings below
-    # are a second layer, not the only one.
+    # `run_read_only` is the SELECT-only identity plus the ceilings, and it
+    # lives in the ClickHouse service registry because it is the boundary,
+    # not a convenience. The identity cannot write at all; `readonly = 2`
+    # and the row/time caps are a second layer, not the only one.
     try:
-        result = reader_client().query(
-            query,
-            settings={
-                "readonly": 2,
-                "max_execution_time": QUERY_TIMEOUT_SECONDS,
-                "max_result_rows": limit,
-                # Truncate rather than error when a query is broader than a
-                # chart can use.
-                "result_overflow_mode": "break",
-            },
-        )
+        result = run_read_only(query, limit=limit)
     except Exception as exc:
-        raise DashboardError(f"query failed: {exc}") from exc
+        raise DashboardError(_explain(exc)) from exc
 
     return {
         "columns": list(result.column_names),

@@ -26,9 +26,10 @@ server runs as its own IAM-gated Cloud Run service.
 backend/
 ├── streamlens/
 │   ├── config.py              settings; reads ../secrets/*.env, env wins
-│   ├── services/              thin provider adapters, one dir per platform
-│   │   ├── clickhouse/        client.py (direct SQL) + mcp.py (agent toolset)
-│   │   └── gcp/               vertex.py (models) + images.py + storage.py
+│   ├── services/              one directory per platform, one registry each
+│   │   ├── clickhouse/        clickhouse_services.py — EVERY ClickHouse call
+│   │   │                      (+ catalog.py / sources.py, reads built on it)
+│   │   └── gcp/               gcp_services.py — EVERY Google Cloud call
 │   ├── dashboards/            panel spec, chart registry, store, tool surface
 │   ├── proposals/             one-sheet doc, store, stills, tool surface
 │   ├── mcp/                   the two in-repo MCP servers + their toolsets
@@ -47,8 +48,24 @@ backend/
     └── seed_proposal.py       three worked proposals, --stills to generate art
 ```
 
-`services/` holds only client construction. Agent behaviour lives in
-`agents/`, so neither directory becomes a junk drawer.
+`services/` holds only platform access; agent behaviour lives in `agents/`,
+so neither becomes a junk drawer. Within `services/`, each platform has
+exactly **one** registry module that constructs every client and makes every
+call into that platform. Nothing else in the codebase opens a ClickHouse
+connection or builds a Google client — so those two files are a complete
+answer to "what does this use, and where".
+
+Both are executable, and calling them is a live integration test:
+
+```bash
+uv run python -m streamlens.services.gcp.gcp_services
+uv run python -m streamlens.services.clickhouse.clickhouse_services
+```
+
+Each walks its `SERVICES` registry, calls the service for real, and prints
+what came back — a Gemini completion, a generated PNG's byte count, a GCS
+round-trip, a minted Cloud Run ID token, the ClickPipes state, and a write
+that the reader identity is refused.
 
 ## Setup
 
@@ -66,6 +83,10 @@ its own process. Credentials come from `../secrets/` (gitignored):
 ```bash
 # Local: MCP server as a uvx stdio subprocess
 uv run python scripts/ask_agent.py "What data do you have access to?"
+
+# Measure the tool use rather than eyeball it: every call and result,
+# untruncated, as JSONL alongside the readable terminal output.
+STREAMLENS_TRACE=run.jsonl uv run python scripts/ask_agent.py "build me a dashboard"
 
 # Local agent against the deployed MCP server
 STREAMLENS_MCP_URL=https://streamlens-clickhouse-mcp-148137280149.us-central1.run.app/mcp \

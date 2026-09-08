@@ -5,25 +5,26 @@
 Unlike `ask_agent.py`, nothing runs locally: this calls the deployed
 reasoning engine, which in turn calls the ClickHouse MCP server on Cloud
 Run. The resource id comes from STREAMLENS_AGENT_ENGINE_ID.
+
+The deployed agent is the same `agents/analyst` the Studio chat runs, minus
+the authoring toolsets — it holds no warehouse credentials, so it reads and
+does not write. See `agents/analyst.authoring_enabled`.
 """
 
 from __future__ import annotations
 
-import os
 import sys
 
-import vertexai
+from streamlens.services.gcp.gcp_services import agent_engine
 
 DEFAULT_PROMPT = "What data do you have access to?"
-PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT", "pctg-503822")
-REGION = os.environ.get("STREAMLENS_AGENT_ENGINE_REGION", "us-central1")
-ENGINE_ID = os.environ.get("STREAMLENS_AGENT_ENGINE_ID", "3345740765799120896")
 
 
 def main(prompt: str) -> None:
-    client = vertexai.Client(project=PROJECT, location=REGION)
-    name = f"projects/{PROJECT}/locations/{REGION}/reasoningEngines/{ENGINE_ID}"
-    agent = client.agent_engines.get(name=name)
+    # The handle is built in the Google Cloud service registry, which is the
+    # only place a Google client is constructed. Project, region and engine
+    # id all come from `config.google_cloud_settings`.
+    agent = agent_engine()
 
     print(f"\n\033[1muser>\033[0m {prompt}\n")
 

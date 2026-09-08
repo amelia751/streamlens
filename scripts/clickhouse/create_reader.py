@@ -30,7 +30,7 @@ SECRETS = REPO_ROOT / "secrets" / "clickhouse.env"
 
 sys.path.insert(0, str(REPO_ROOT / "backend"))
 
-from streamlens.services.clickhouse.client import get_client  # noqa: E402
+from streamlens.services.clickhouse.clickhouse_services import get_client  # noqa: E402
 
 READER = "streamlens_reader"
 PROFILE = "streamlens_reader_profile"

@@ -64,7 +64,7 @@ export type Proposal = {
   hook: string;
   logline: string;
   connection: string;
-  story: string;
+  theme: string;
   market: string;
   archetypes: ProposalArchetype[];
   source_dashboard_id: string;

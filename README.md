@@ -19,6 +19,54 @@ invisible in either dataset alone.
 
 ---
 
+## Where the platforms are used
+
+Two files, one per platform. Each registers every service the product uses,
+constructs its clients, and holds every call into it — and the rest of the
+codebase imports from them, so nothing here is named without being called.
+Both are executable: running one calls every service it registers and prints
+what came back.
+
+| Platform | File | Run it |
+|---|---|---|
+| **Google Cloud** | [`backend/streamlens/services/gcp/gcp_services.py`](backend/streamlens/services/gcp/gcp_services.py) | `uv run python -m streamlens.services.gcp.gcp_services` |
+| **ClickHouse Cloud** | [`backend/streamlens/services/clickhouse/clickhouse_services.py`](backend/streamlens/services/clickhouse/clickhouse_services.py) | `uv run python -m streamlens.services.clickhouse.clickhouse_services` |
+
+```
+$ uv run python -m streamlens.services.gcp.gcp_services
+project pctg-503822 · region us-central1 · models on global
+
+  ok   Vertex AI — Gemini: model pinned to gemini-3.8-flash on global
+  ok   Vertex AI — GenAI text: gemini responded: 'Ready'
+  ok   Vertex AI — Nano Banana Pro: gemini-3-pro-image returned 1,447,733 bytes of image/png
+  ok   Cloud Storage — proposals: wrote, read (10 bytes) and deleted gs://streamlens-proposals/healthcheck/roundtrip.txt
+  ok   Cloud Storage — raw lake: gs://streamlens-data/raw/ holds 20+ objects
+  ok   Cloud Run: minted an ID token for https://streamlens-clickhouse-mcp-…run.app (862 chars)
+  ok   Secret Manager: read streamlens-clickhouse-host from Secret Manager
+
+$ uv run python -m streamlens.services.clickhouse.clickhouse_services
+service streamlens · cqobxgg69k.us-central1.gcp.clickhouse.cloud:8443
+
+  ok   SQL — admin (`default`): server 26.2.1.641 — landing:34, streamlens:5, youtube:9
+  ok   SQL — reader (`streamlens_reader`): read 57,659 youtube.video rows; write refused by the server
+  ok   Cloud REST API: 17 ClickPipes on the service (17 Completed)
+  ok   ClickPipes: 34 landing tables holding 267,410,928 rows
+  ok   ReplacingMergeTree stores: 4 dashboards / 13 panels, 4 proposals / 11 adopted charts
+  ok   MCP server: 3 read-only tools over Cloud Run over HTTP: list_databases, list_tables, run_query
+```
+
+**Google Cloud** — Vertex AI (`gemini-3.8-flash` for the agent and the brief,
+`gemini-3-pro-image` for stills, plus Search grounding and the code sandbox),
+Cloud Storage (raw lake and stills, separate buckets), Cloud Run (the IAM-gated
+MCP service), Agent Engine (the deployed analyst), Secret Manager.
+
+**ClickHouse Cloud** — the SQL interface under two identities, the Cloud REST
+API for ClickPipes state, 17 ClickPipes ingesting from GCS, the
+`mcp-clickhouse` server the agent explores through, and the
+ReplacingMergeTree stores holding dashboards and proposals.
+
+---
+
 ## Architecture
 
 ```

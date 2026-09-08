@@ -57,8 +57,11 @@ def _as_int(name: str, default: int) -> int:
 @dataclass(frozen=True)
 class GoogleCloudSettings:
     project: str
+    region: str
     model_location: str
     model: str
+    raw_bucket: str
+    agent_engine_id: str
     credentials_path: Path | None
 
     def apply_defaults(self) -> None:
@@ -191,10 +194,19 @@ def google_cloud_settings() -> GoogleCloudSettings:
     sa_key = SECRETS_DIR / "pctg-sa.json"
     return GoogleCloudSettings(
         project=os.environ.get("GOOGLE_CLOUD_PROJECT", "pctg-503822"),
+        # Where regional resources live: Cloud Run, Agent Runtime, the
+        # buckets. Not where the models are served — see model_location.
+        region=os.environ.get("STREAMLENS_REGION", "us-central1"),
         # gemini-3.8-flash is served only from the global endpoint; the
         # us-central1 endpoint returns 404 for it.
         model_location=os.environ.get("STREAMLENS_MODEL_LOCATION", "global"),
         model=os.environ.get("STREAMLENS_MODEL", "gemini-3.8-flash"),
+        # The immutable lake the ClickPipes read. Never written by anything
+        # the model influences — proposal stills go to their own bucket.
+        raw_bucket=os.environ.get("STREAMLENS_RAW_BUCKET", "streamlens-data"),
+        agent_engine_id=os.environ.get(
+            "STREAMLENS_AGENT_ENGINE_ID", "3345740765799120896"
+        ),
         credentials_path=sa_key if sa_key.exists() else None,
     )
 

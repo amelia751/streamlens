@@ -66,7 +66,7 @@ LIMITS: dict[str, tuple[int, str]] = {
     "hook": (220, "one sentence over the still"),
     "logline": (320, "one or two sentences, the pitch itself"),
     "connection": (600, "what the warehouse finding has to do with the idea"),
-    "story": (2400, "two or three short paragraphs, blank-line separated"),
+    "theme": (1400, "two short paragraphs on what the film is about"),
     "market": (900, "the argument the charts underneath are making"),
 }
 
@@ -76,7 +76,7 @@ ARCHETYPE_NOTE_MAX = 120
 # Every field a proposal must actually have. A one-sheet with an empty
 # slate chip or a missing "The room" renders as a hole, not as brevity.
 REQUIRED = ("title", "genre", "kicker", "budget", "hook", "logline",
-            "connection", "story", "market")
+            "connection", "theme", "market")
 
 
 def genre_list() -> str:
@@ -114,7 +114,7 @@ class ProposalDoc:
     hook: str = ""
     logline: str = ""
     connection: str = ""
-    story: str = ""
+    theme: str = ""
     market: str = ""
     archetypes: list[Archetype] = field(default_factory=list)
 
@@ -127,7 +127,7 @@ class ProposalDoc:
             "hook": self.hook,
             "logline": self.logline,
             "connection": self.connection,
-            "story": self.story,
+            "theme": self.theme,
             "market": self.market,
             "archetypes": [a.to_dict() for a in self.archetypes],
         }
@@ -182,7 +182,7 @@ def parse_doc(raw: dict) -> ProposalDoc:
         hook=text("hook"),
         logline=text("logline"),
         connection=text("connection"),
-        story=text("story"),
+        theme=text("theme"),
         market=text("market"),
         archetypes=archetypes,
     )

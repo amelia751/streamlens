@@ -46,15 +46,13 @@ PROPOSALS: list[tuple[dict, str, list[str], str]] = [
                 "is flat. The audience is already in the room; they just will "
                 "not admit it in daylight."
             ),
-            "story": (
+            "theme": (
                 "A late-night habit, not a plot. Someone keeps the same three "
-                "titles open after 1am. The person who uploaded them starts to "
-                "notice that the numbers have a face.\n\n"
-                "The theme is anonymity breaking. Not a chase and not a twist "
-                "— the catalog after midnight as a room two people are already "
-                "in.\n\n"
-                "Write the window, not the ending. The warehouse already proves "
-                "the hours exist."
+                "titles open after 1am, and the person who uploaded them starts "
+                "to notice that the numbers have a face.\n\n"
+                "The theme is anonymity breaking — not a chase and not a twist, "
+                "but the catalog after midnight as a room two people are "
+                "already in, and only one of them knows it."
             ),
             "market": (
                 "YouTube Overview already shows the after-midnight lift. Pair it "
@@ -99,14 +97,13 @@ PROPOSALS: list[tuple[dict, str, list[str], str]] = [
                 "Shorts vs Longform is not a format war. It is a filter: what "
                 "survives ninety seconds is what a room will sit for."
             ),
-            "story": (
-                "Start in the length people already finish. A punchline that "
-                "works at 0:58 does not need a first act invented for it.\n\n"
+            "theme": (
+                "It starts in the length people already finish. A punchline "
+                "that works at 0:58 does not need a first act invented for "
+                "it.\n\n"
                 "The feature exists because the short made a promise a minute "
-                "cannot keep. The theme is expansion: what you owe the laugh "
-                "once it leaves the phone.\n\n"
-                "Stay general. The cut is the idea. Plot comes later, if it "
-                "earns the last frame the short already gave away."
+                "cannot keep. The theme is expansion — what a joke owes the "
+                "room once it has left the phone."
             ),
             "market": (
                 "Shorts vs Longform already splits the catalog. A shorts-native "
@@ -151,14 +148,12 @@ PROPOSALS: list[tuple[dict, str, list[str], str]] = [
                 "Channel activity grows in markets the network did not plan for. "
                 "The home audience is already counting the title as theirs."
             ),
-            "story": (
-                "Write toward the country that already claimed the title, not "
-                "the one that financed it. The family on screen is watching a "
-                "different country's version of themselves.\n\n"
+            "theme": (
+                "The film belongs to the country that already claimed the "
+                "title, not the one that financed it. The family on screen is "
+                "watching a different country's version of themselves.\n\n"
                 "The theme is recognition. Home is the market that kept the "
-                "hours, not the city on the call sheet.\n\n"
-                "Do not lock a plot. Name the kitchen the warehouse already says "
-                "is watching."
+                "hours, not the city on the call sheet."
             ),
             "market": (
                 "Network growth is not evenly spread. The chart is the argument: "
