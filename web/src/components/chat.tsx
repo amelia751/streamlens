@@ -13,18 +13,33 @@
  * the backend: a turn is streamed into local state because that is what makes
  * it feel live, and a thread being reopened is refetched instead of
  * remembered. Closing a tab therefore throws nothing away — it is still in
- * Saved, and deleting is a separate, deliberate act.
+ * history, and deleting is a separate, deliberate act.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Markdown from "react-markdown";
+import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { readPasted, refLink, type Ref } from "@/lib/links";
+import { RowMenu } from "@/components/row-menu";
+import { Tip } from "@/components/tip";
 import { useWorkspace } from "@/components/workspace";
+
+/**
+ * A chart or a canvas the user pasted in, standing for itself.
+ *
+ * The path is the whole reference — the backend reads the same one back and
+ * hands the agent the chart's spec and current numbers. The label is for the
+ * person: a chip saying "IMDb rating of top titles" is a reference someone
+ * can check, where the URL it came from is not.
+ */
+type Attachment = { path: string; label: string; whole: boolean };
 
 type Message = {
   role: "user" | "agent" | "thought";
   text: string;
+  /** What was attached when it was sent, so the turn keeps its receipt. */
+  attached?: Attachment[];
 };
 
 type Conversation = {
@@ -32,13 +47,15 @@ type Conversation = {
   name: string;
   messages: Message[];
   draft: string;
+  /** Charts pasted into the draft, sent with it and cleared by it. */
+  attached: Attachment[];
   activity?: string;
   busy: boolean;
   /** Whether the transcript has been fetched. Reopened tabs start false. */
   loaded: boolean;
 };
 
-/** A thread the backend is holding, as listed for the Saved panel. */
+/** A thread the backend is holding, as listed for chat history. */
 type Saved = {
   id: string;
   title: string;
@@ -53,15 +70,46 @@ const PROMPTS = [
 
 // How many threads come back as tabs on a reload. Enough to carry yesterday's
 // work over; not so many that the tab strip is unreadable. The rest are one
-// click away in Saved.
+// click away in history.
 const RESTORED = 3;
+
+function ClockIcon() {
+  return (
+    <svg className="chat-head-icon" viewBox="0 0 16 16" aria-hidden>
+      <circle
+        cx="8"
+        cy="8"
+        r="5.4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+      />
+      <path
+        d="M8 5v3.15l2.05 1.2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 function newId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `s-${Date.now()}`;
 }
 
 function blank(id = newId(), name = "New chat"): Conversation {
-  return { id, name, messages: [], draft: "", busy: false, loaded: true };
+  return {
+    id,
+    name,
+    messages: [],
+    draft: "",
+    attached: [],
+    busy: false,
+    loaded: true,
+  };
 }
 
 /**
@@ -71,7 +119,39 @@ function blank(id = newId(), name = "New chat"): Conversation {
  * and it is emphatically not empty — hence `loaded`.
  */
 function isPlaceholder(c: Conversation): boolean {
-  return c.loaded && !c.busy && c.messages.length === 0 && !c.draft.trim();
+  return (
+    c.loaded &&
+    !c.busy &&
+    c.messages.length === 0 &&
+    !c.draft.trim() &&
+    c.attached.length === 0
+  );
+}
+
+/**
+ * What to call the thing a pasted path points at.
+ *
+ * Read from the canvas rather than from the clipboard, so a chart renamed
+ * since it was copied comes back under the name it has now — and so a chip
+ * only appears for something that is really there.
+ */
+async function nameOf(ref: Ref): Promise<string> {
+  const route =
+    ref.kind === "dashboard"
+      ? `/api/dashboards/${encodeURIComponent(ref.id)}`
+      : `/api/proposals/${encodeURIComponent(ref.id)}`;
+  try {
+    const res = await fetch(route, { cache: "no-store" });
+    if (!res.ok) return "";
+    const body = await res.json();
+    if (!ref.panelId) return body.title ?? "";
+    const panel = (body.panels ?? []).find(
+      (p: { id: string; title: string }) => p.id === ref.panelId,
+    );
+    return panel?.title ?? "";
+  } catch {
+    return "";
+  }
 }
 
 /** Same rule the backend names a thread by, so a reload reads the same. */
@@ -99,6 +179,54 @@ async function listSaved(): Promise<Saved[]> {
   }
 }
 
+/**
+ * The charts riding along with a message.
+ *
+ * Above the box while the message is being written, and above it in the log
+ * once it has been sent — the same strip either way, so what was attached to
+ * a turn is still visible after the turn. The label opens it on the canvas,
+ * because a reference you cannot look at is a reference you have to trust.
+ */
+function Attached({
+  items,
+  onOpen,
+  onDrop,
+}: {
+  items: Attachment[];
+  onOpen: (path: string) => boolean;
+  onDrop?: (path: string) => void;
+}) {
+  return (
+    <div className="chat-refs" aria-label="Attached to this message">
+      {items.map((item) => (
+        <span key={item.path} className="chat-ref">
+          <button
+            type="button"
+            className="chat-ref-open"
+            title={`Show ${item.label} on the canvas`}
+            onClick={() => onOpen(item.path)}
+          >
+            <span className="chat-ref-mark" aria-hidden>
+              {item.whole ? "▤" : "▦"}
+            </span>
+            {item.label}
+          </button>
+          {onDrop && (
+            <button
+              type="button"
+              className="chat-ref-drop"
+              aria-label={`Remove ${item.label}`}
+              onClick={() => onDrop(item.path)}
+            >
+              ×
+            </button>
+          )}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 /** Split an SSE byte stream into decoded `data:` payloads. */
 async function* sseEvents(body: ReadableStream<Uint8Array>) {
   const reader = body.getReader();
@@ -121,7 +249,18 @@ async function* sseEvents(body: ReadableStream<Uint8Array>) {
 }
 
 export function Chat() {
-  const { touchDashboard, touchProposal, tabs, activeId } = useWorkspace();
+  const {
+    touchDashboard,
+    touchProposal,
+    tabs,
+    activeId,
+    follow,
+    startBuild,
+    finishBuild,
+    clearBuilds,
+    turnStarted,
+    turnEnded,
+  } = useWorkspace();
 
   // The canvas tab the user is looking at, sent with every turn. Without
   // it the analyst guesses what "that chart" means.
@@ -143,7 +282,6 @@ export function Chat() {
   const [open, setOpen] = useState(true);
   const [saved, setSaved] = useState<Saved[]>([]);
   const [showSaved, setShowSaved] = useState(false);
-  const [deleting, setDeleting] = useState<Saved | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(
     null,
   );
@@ -167,6 +305,94 @@ export function Chat() {
     [],
   );
 
+  /**
+   * The other half of a panel's copy button: a link pasted in here becomes a
+   * chip standing for that chart, and the chart itself goes with the turn.
+   *
+   * Whatever was typed around the link stays in the draft. The chip goes up
+   * immediately under whatever the path says, and takes the chart's real name
+   * when the canvas answers — a paste that shows nothing for a round trip
+   * looks like a paste that was swallowed, and a path that resolves to
+   * nothing is still better shown than dropped.
+   */
+  const attach = useCallback(
+    async (id: string, refs: Ref[]) => {
+      const pasted = refs.map((ref) => ({
+        path: refLink(ref),
+        label: ref.panelId || ref.id,
+        whole: !ref.panelId,
+      }));
+      patch(id, (c) => ({
+        ...c,
+        attached: [
+          ...c.attached,
+          ...pasted.filter((p) => !c.attached.some((a) => a.path === p.path)),
+        ],
+      }));
+
+      for (const ref of refs) {
+        const label = await nameOf(ref);
+        if (!label) continue;
+        const path = refLink(ref);
+        patch(id, (c) => ({
+          ...c,
+          attached: c.attached.map((a) =>
+            a.path === path ? { ...a, label } : a,
+          ),
+        }));
+      }
+    },
+    [patch],
+  );
+
+  const detach = useCallback(
+    (id: string, path: string) =>
+      patch(id, (c) => ({
+        ...c,
+        attached: c.attached.filter((a) => a.path !== path),
+      })),
+    [patch],
+  );
+
+  /**
+   * The analyst names what it built as a link to it, and this is what makes
+   * the link land: a plain click opens the tab, because the canvas is beside
+   * the chat and reloading the app to reach it would be absurd.
+   *
+   * A modifier-click is left to the browser on purpose. The href is a real
+   * path the workspace also honours on arrival, so cmd-click opens the same
+   * chart in a second window rather than doing nothing.
+   */
+  const markdown = useMemo<Components>(
+    () => ({
+      a: ({ href, children }) => {
+        const path = href ?? "";
+        const inApp = path.startsWith("/studio?");
+        return (
+          <a
+            href={path}
+            className={inApp ? "chat-link" : undefined}
+            {...(inApp ? {} : { target: "_blank", rel: "noreferrer" })}
+            onClick={(e) => {
+              if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+              if (follow(path)) e.preventDefault();
+            }}
+          >
+            {children}
+          </a>
+        );
+      },
+    }),
+    [follow],
+  );
+
+  // What the tabs are right now, for the restore below: it decides after an
+  // await, by which time the state it closed over is a second out of date.
+  const live = useRef(conversations);
+  useEffect(() => {
+    live.current = conversations;
+  }, [conversations]);
+
   /** Bring back the last few threads, so a reload continues rather than restarts. */
   useEffect(() => {
     let alive = true;
@@ -177,16 +403,20 @@ export function Chat() {
 
       setSaved(threads);
       const restored = threads.slice(0, RESTORED).reverse();
+      // Someone who pasted a chart and hit send in the first second is mid-
+      // turn; their tab is kept either way, but pulling the view onto an old
+      // thread underneath them is not a restore, it is an interruption.
+      const started = live.current.some((c) => !isPlaceholder(c));
       setConversations((prev) => {
         // The placeholder tab goes only if the user has not touched it.
-        const started = prev.filter((c) => !isPlaceholder(c));
+        const kept = prev.filter((c) => !isPlaceholder(c));
         const reopened = restored.map((thread) => ({
           ...blank(thread.id, thread.title),
           loaded: false,
         }));
-        return [...reopened, ...started];
+        return [...reopened, ...kept];
       });
-      setCurrentId(restored[restored.length - 1].id);
+      if (!started) setCurrentId(restored[restored.length - 1].id);
     })();
 
     return () => {
@@ -253,15 +483,27 @@ export function Chat() {
       if (!trimmed || !target || target.busy) return;
 
       const first = target.messages.length === 0;
+      // Read off the draft before it is cleared: the attachments belong to
+      // this turn, and the box is empty by the time the request is built.
+      const attached = target.attached;
       patch(id, (c) => ({
         ...c,
         name: first ? titleFrom(trimmed) : c.name,
-        messages: [...c.messages, { role: "user", text: trimmed }],
+        messages: [
+          ...c.messages,
+          {
+            role: "user",
+            text: trimmed,
+            attached: attached.length ? attached : undefined,
+          },
+        ],
         draft: "",
+        attached: [],
         busy: true,
         activity: "thinking",
       }));
 
+      turnStarted();
       try {
         const res = await fetch("/api/chat", {
           method: "POST",
@@ -269,10 +511,16 @@ export function Chat() {
           body: JSON.stringify({
             message: trimmed,
             session_id: id,
+            attachments: attached.map((a) => a.path),
             ...focus,
           }),
         });
         if (!res.ok || !res.body) throw new Error(await res.text());
+
+        // Whether the reply is mid-sentence: set by a piece of prose and
+        // cleared by anything else, so a thought or a tool call between two
+        // model calls closes the bubble the first one was writing.
+        let streaming = false;
 
         for await (const event of sseEvents(res.body)) {
           if (event.type === "activity") {
@@ -293,6 +541,49 @@ export function Chat() {
             touchDashboard(event.dashboard_id);
           } else if (event.type === "proposal") {
             touchProposal(event.proposal_id);
+          } else if (event.type === "building") {
+            startBuild({
+              token: event.token,
+              kind: event.kind,
+              dashboardId: event.dashboard_id,
+              proposalId: event.proposal_id,
+              panelId: event.panel_id || undefined,
+              title: event.title || undefined,
+              chart: event.chart || undefined,
+              width: event.width,
+              height: event.height,
+            });
+          } else if (event.type === "built") {
+            finishBuild(event.token, event.panel_id || undefined);
+          } else if (event.type === "delta") {
+            // A reply arriving as it is written. Whether it continues a bubble
+            // is tracked rather than inferred from the last message, because an
+            // agent bubble from an earlier model call in the same turn is a
+            // finished sentence, not something to keep writing into.
+            //
+            // Read out here and not inside the updater: React runs an updater
+            // during a later render, by which time the flag below has moved on,
+            // and the first chunk of a reply would append itself to whatever
+            // was in front of it — the user's own message, usually.
+            const continues = streaming;
+            streaming = true;
+
+            patch(id, (c) => {
+              const last = c.messages[c.messages.length - 1];
+              return {
+                ...c,
+                messages: continues
+                  ? [
+                      ...c.messages.slice(0, -1),
+                      {
+                        role: "agent" as const,
+                        text: (last?.text ?? "") + event.text,
+                      },
+                    ]
+                  : [...c.messages, { role: "agent" as const, text: event.text }],
+              };
+            });
+            continue;
           } else if (event.type === "text") {
             patch(id, (c) => ({
               ...c,
@@ -307,6 +598,7 @@ export function Chat() {
               ],
             }));
           }
+          streaming = false;
         }
       } catch (e) {
         patch(id, (c) => ({
@@ -315,17 +607,34 @@ export function Chat() {
         }));
       } finally {
         patch(id, (c) => ({ ...c, activity: undefined, busy: false }));
+        // Whatever the turn had not finished making, it is not going to now —
+        // including when it failed, which is when a placeholder left shimmering
+        // would be a lie.
+        clearBuilds();
+        turnEnded();
         // The turn just created or renamed a thread on the backend.
         setSaved(await listSaved());
       }
     },
-    [conversations, currentId, focus, patch, touchDashboard, touchProposal],
+    [
+      conversations,
+      currentId,
+      focus,
+      patch,
+      touchDashboard,
+      touchProposal,
+      startBuild,
+      finishBuild,
+      clearBuilds,
+      turnStarted,
+      turnEnded,
+    ],
   );
 
   /**
    * A new thread is local until its first turn. The backend writes the session
    * when the turn arrives, which is why an afternoon of clicking + does not
-   * leave a column of empty conversations in Saved.
+   * leave a column of empty conversations in history.
    */
   const startConversation = useCallback(() => {
     const idle = conversations.find(isPlaceholder);
@@ -377,15 +686,17 @@ export function Chat() {
 
   const forget = useCallback(
     async (thread: Saved) => {
-      setDeleting(null);
       setSaved((prev) => prev.filter((t) => t.id !== thread.id));
       closeTab(thread.id);
       try {
-        await fetch(`/api/conversations/${thread.id}`, { method: "DELETE" });
-      } catch {
-        // It stays on the backend; the next list refresh will show it again.
+        const res = await fetch(`/api/conversations/${thread.id}`, {
+          method: "DELETE",
+        });
+        if (!res.ok) throw new Error(await res.text());
+      } catch (e) {
+        setSaved(await listSaved());
+        throw e;
       }
-      setSaved(await listSaved());
     },
     [closeTab],
   );
@@ -482,39 +793,44 @@ export function Chat() {
             </div>
           ))}
         </div>
-        <button
-          type="button"
-          className="chat-new"
-          onClick={startConversation}
-          aria-label="New conversation"
-          title="New conversation"
-        >
-          +
-        </button>
-        <button
-          type="button"
-          className={`chat-saved-toggle${showSaved ? " on" : ""}`}
-          onClick={() => setShowSaved((shown) => !shown)}
-          aria-label="Saved conversations"
-          title="Saved conversations"
-        >
-          Saved
-        </button>
-        <button
-          type="button"
-          className="chat-hide"
-          onClick={() => setOpen(false)}
-          aria-label="Hide the conversation"
-        >
-          ×
-        </button>
+        <Tip label="New Tab">
+          <button
+            type="button"
+            className="chat-new"
+            onClick={startConversation}
+            aria-label="New Tab"
+          >
+            +
+          </button>
+        </Tip>
+        <Tip label="Chat History">
+          <button
+            type="button"
+            className={`chat-saved-toggle${showSaved ? " on" : ""}`}
+            onClick={() => setShowSaved((shown) => !shown)}
+            aria-label="Chat History"
+            aria-pressed={showSaved}
+          >
+            <ClockIcon />
+          </button>
+        </Tip>
+        <Tip label="Close">
+          <button
+            type="button"
+            className="chat-hide"
+            onClick={() => setOpen(false)}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </Tip>
       </header>
 
       {showSaved && (
         <div className="chat-saved">
           {saved.length === 0 ? (
             <p className="chat-saved-empty">
-              Nothing saved yet. A conversation is kept once you ask something.
+              Nothing here yet. A conversation is kept once you ask something.
             </p>
           ) : (
             <ul>
@@ -526,35 +842,15 @@ export function Chat() {
                       {ago(thread.updated_at)}
                     </span>
                   </button>
-                  <button
-                    type="button"
-                    className="chat-saved-delete"
-                    aria-label={`Delete ${thread.title}`}
-                    onClick={() => setDeleting(thread)}
-                  >
-                    ×
-                  </button>
+                  <RowMenu
+                    title={thread.title}
+                    note="The transcript is gone, and the analyst stops being able to recall it."
+                    onDelete={() => forget(thread)}
+                  />
                 </li>
               ))}
             </ul>
           )}
-        </div>
-      )}
-
-      {deleting && (
-        <div className="chat-confirm">
-          <p>
-            Delete “{deleting.title}”? The transcript is gone, and the analyst
-            stops being able to recall it.
-          </p>
-          <div className="chat-confirm-actions">
-            <button type="button" onClick={() => forget(deleting)}>
-              Delete
-            </button>
-            <button type="button" onClick={() => setDeleting(null)}>
-              Keep
-            </button>
-          </div>
         </div>
       )}
 
@@ -575,16 +871,21 @@ export function Chat() {
 
         {current.messages.map((message, i) =>
           message.role === "user" ? (
-            <p key={i} className="chat-msg is-user">
-              {message.text}
-            </p>
+            <div key={i} className="chat-said">
+              {message.attached && (
+                <Attached items={message.attached} onOpen={follow} />
+              )}
+              <p className="chat-msg is-user">{message.text}</p>
+            </div>
           ) : message.role === "thought" ? (
             <p key={i} className="chat-msg is-thought">
               {message.text}
             </p>
           ) : (
             <div key={`${current.id}-${i}`} className="chat-msg is-agent">
-              <Markdown remarkPlugins={[remarkGfm]}>{message.text}</Markdown>
+              <Markdown remarkPlugins={[remarkGfm]} components={markdown}>
+                {message.text}
+              </Markdown>
             </div>
           ),
         )}
@@ -596,6 +897,14 @@ export function Chat() {
           </p>
         )}
       </div>
+
+      {current.attached.length > 0 && (
+        <Attached
+          items={current.attached}
+          onOpen={follow}
+          onDrop={(path) => detach(current.id, path)}
+        />
+      )}
 
       <form
         className="chat-form"
@@ -612,6 +921,24 @@ export function Chat() {
           onChange={(e) =>
             patch(current.id, (c) => ({ ...c, draft: e.target.value }))
           }
+          onPaste={(e) => {
+            const { refs, rest } = readPasted(
+              e.clipboardData.getData("text/plain"),
+            );
+            if (refs.length === 0) return;
+
+            // The link is lifted out of the text and the rest is typed in as
+            // usual, at the cursor, because a paste is often mid-sentence.
+            e.preventDefault();
+            const box = e.currentTarget;
+            const from = box.selectionStart ?? box.value.length;
+            const to = box.selectionEnd ?? from;
+            patch(current.id, (c) => ({
+              ...c,
+              draft: c.draft.slice(0, from) + rest + c.draft.slice(to),
+            }));
+            void attach(current.id, refs);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();

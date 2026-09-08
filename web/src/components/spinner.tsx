@@ -25,6 +25,7 @@ export function Spinner({ className }: { className?: string }) {
   );
 }
 
+/** A whole screen, or a whole panel of one, that has nothing to draw yet. */
 export function Connecting({
   label = "Connecting to ClickHouse instance",
 }: {
@@ -35,5 +36,31 @@ export function Connecting({
       <Spinner />
       <p>{label}</p>
     </div>
+  );
+}
+
+/**
+ * The same mark at text size, for a tile too short to centre a screen in.
+ *
+ * `overlay` covers the tile's chart box instead of taking room beside it,
+ * which is what a chart waiting on its geometry needs: the box has to stay
+ * laid out, because ECharts is already initialised against it.
+ */
+export function Waiting({
+  label,
+  overlay = false,
+}: {
+  label: string;
+  overlay?: boolean;
+}) {
+  return (
+    <p
+      className={`tile-waiting${overlay ? " is-overlay" : ""}`}
+      role="status"
+      aria-live="polite"
+    >
+      <Spinner className="spinner-sm" />
+      {label}
+    </p>
   );
 }

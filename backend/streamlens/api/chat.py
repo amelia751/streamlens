@@ -5,6 +5,14 @@ changes a dashboard we emit a `canvas` event carrying only its id, and when
 one changes a proposal a `proposal` event carrying only its id; the browser
 refetches through the ordinary REST route either way. So the chat can be
 wrong about what it built and the canvas still shows the truth.
+
+Everything else here exists because a turn takes a minute and the user is
+watching it. A tool call is announced when it is made (`activity`), and the
+ones that put something on the canvas are announced with the shape of what is
+coming (`building`, then `built`), so a chart holds its place while its query
+runs instead of appearing from nowhere. The reply streams as it is written
+(`delta`) rather than landing whole. None of it changes what the turn does —
+it changes when the user can see that it is happening.
 """
 
 from __future__ import annotations
@@ -12,7 +20,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import AsyncIterator
+from typing import AsyncIterator, Sequence
 
 from google.adk.agents.invocation_context import LlmCallsLimitExceededError
 from google.adk.runners import Runner
@@ -57,6 +65,19 @@ MUTATING_PROPOSALS = {
     "adopt_panel",
     "add_proposal_panel",
     "delete_proposal_panel",
+    "generate_still",
+}
+
+# Calls that put a visible thing on the canvas and take long enough that the
+# canvas should not pretend otherwise. `add_panel` runs its query before it
+# saves, and the model fires four of them at once, so waiting for the results
+# means four charts appear together after twenty quiet seconds. Announcing the
+# calls instead gives the canvas four labelled holes to fill.
+BUILDS = {
+    "add_panel",
+    "update_panel",
+    "adopt_panel",
+    "add_proposal_panel",
     "generate_still",
 }
 
@@ -251,12 +272,105 @@ def _touched(key: str, args: dict, response: object) -> str | None:
     return None
 
 
+def _made_panel(response: object) -> str:
+    """The id of the panel a call just saved, from its result.
+
+    From the result and never from the arguments, unlike `_touched`: on
+    `adopt_panel` the argument named `panel_id` is the chart being copied *from*
+    and the result's is the copy that now exists, which is the one the canvas is
+    about to draw.
+    """
+    if not isinstance(response, dict):
+        return ""
+    if response.get("panel_id"):
+        return str(response["panel_id"])
+    nested = response.get("structuredContent") or response.get("result")
+    if isinstance(nested, dict) and nested.get("panel_id"):
+        return str(nested["panel_id"])
+    return ""
+
+
+def _int(value: object, fallback: int) -> int:
+    """A grid number from a model-written argument, or the tool's own default."""
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _building(token: str, name: str, args: dict) -> dict | None:
+    """The shape of what a call is about to make, for the canvas to hold open.
+
+    Read off the arguments the model has already written, which is what makes
+    this possible at all: `add_panel` is told the title, the chart type and the
+    grid span before it runs, so the placeholder can stand in the cell the real
+    chart will occupy, at the size it will be, with its name on it. The layout
+    that settles while the queries run is the layout that stays.
+
+    Nothing here is trusted as data — the canvas still refetches when the call
+    lands. A placeholder is a hole of roughly the right shape, and a wrong
+    guess about the shape costs one reflow.
+
+    `token` is the call id, which comes back on the response, so the browser
+    can drop this again without matching on titles.
+    """
+    if name in ("add_panel", "update_panel"):
+        dashboard_id = args.get("dashboard_id")
+        if not dashboard_id:
+            return None
+        return {
+            "type": "building",
+            "token": token,
+            "kind": "panel",
+            "dashboard_id": str(dashboard_id),
+            # Set on a rewrite, empty on a new panel: the difference between
+            # marking a chart busy and holding a space for one.
+            "panel_id": str(args.get("panel_id") or ""),
+            "title": str(args.get("title") or "").strip(),
+            "chart": str(args.get("chart_type") or ""),
+            "width": _int(args.get("width"), 6),
+            "height": _int(args.get("height"), 1),
+        }
+
+    if name in ("adopt_panel", "add_proposal_panel"):
+        proposal_id = args.get("proposal_id")
+        if not proposal_id:
+            return None
+        return {
+            "type": "building",
+            "token": token,
+            "kind": "panel",
+            "proposal_id": str(proposal_id),
+            "panel_id": "",
+            # An adopted chart keeps the dashboard's title unless it is given
+            # a new one, and we do not have the old one here.
+            "title": str(args.get("title") or "").strip(),
+            "chart": str(args.get("chart_type") or ""),
+            "width": _int(args.get("width"), 6),
+            "height": _int(args.get("height"), 1),
+        }
+
+    if name == "generate_still":
+        proposal_id = args.get("proposal_id")
+        if not proposal_id:
+            return None
+        return {
+            "type": "building",
+            "token": token,
+            "kind": "still",
+            "proposal_id": str(proposal_id),
+        }
+
+    return None
+
+
 async def stream_turn(
     message: str,
     session_id: str,
     user: str = "local",
     focus_kind: str = "",
     focus_id: str = "",
+    attachments: Sequence[str] = (),
 ) -> AsyncIterator[str]:
     """One turn, on MCP connections opened and closed for this turn alone.
 
@@ -269,10 +383,16 @@ async def stream_turn(
     said — and so a turn that changes tabs corrects the referent instead of
     stacking a second one.
 
+    `attachments` are canvas paths the user pasted into the box — a chart they
+    copied, usually. Those go into the message as content, because they are
+    something the user just said: "this chart" is a different claim from
+    "the tab I have open", and it is true of this turn only.
+
     The session store and the memory service outlive the turn. The transcript
     is what makes "make that weekly" work; memory is what makes it work
     tomorrow, in a thread that has not been opened yet.
     """
+    from streamlens.api.attachments import describe
     from streamlens.agents.analyst import build_app, build_toolsets, run_config
 
     toolsets = build_toolsets()
@@ -284,7 +404,18 @@ async def stream_turn(
         memory_service=memory_service(),
     )
 
-    content = types.Content(role="user", parts=[types.Part(text=message)])
+    # The attached charts first and the request last, so the thing the model
+    # acts on is the sentence the user wrote.
+    # Off the loop: resolving an attachment replays its query, and this
+    # generator is also the thing streaming the answer.
+    attached = await asyncio.to_thread(describe, attachments) if attachments else ""
+    content = types.Content(
+        role="user",
+        parts=(
+            [types.Part(text=attached)] if attached else []
+        )
+        + [types.Part(text=message)],
+    )
     # Tool calls carry the dashboard id; their responses often do not, so we
     # remember what each call was for and resolve it when the result lands.
     pending: dict[str, dict] = {}
@@ -309,6 +440,16 @@ async def stream_turn(
                 }
             )
         else:
+            # What the model call in flight has already sent in pieces. ADK
+            # streams prose as it is written and then repeats it in a closing
+            # event — sometimes in more than one, which is why a flag that gets
+            # spent on the first close is not enough. The closing copy is
+            # judged on its text instead: prose already inside what was
+            # streamed is a repeat, and only prose that is new gets sent, which
+            # is what a model call that streamed nothing looks like.
+            said = ""
+            mused = ""
+
             async for event in runner.run_async(
                 user_id=user,
                 session_id=session_id,
@@ -326,10 +467,29 @@ async def stream_turn(
                 },
                 run_config=run_config(),
             ):
+                partial = bool(event.partial)
                 for part in (event.content.parts if event.content else []) or []:
+                    # A chunk of something still being written. Text is the
+                    # only part of it that means anything yet — a function call
+                    # arrives in chunks too, name first and arguments a
+                    # fragment at a time — so the rest waits for the event ADK
+                    # closes the call with, which is also when the call runs.
+                    if partial:
+                        if not part.text:
+                            continue
+                        if getattr(part, "thought", None):
+                            mused += part.text
+                            yield _sse({"type": "thought", "text": part.text})
+                        else:
+                            said += part.text
+                            yield _sse({"type": "delta", "text": part.text})
+                        continue
+
                     if part.function_call:
                         call = part.function_call
-                        pending[call.id or call.name] = dict(call.args or {})
+                        token = call.id or call.name or ""
+                        args = dict(call.args or {})
+                        pending[token] = args
                         yield _sse(
                             {
                                 "type": "activity",
@@ -337,10 +497,15 @@ async def stream_turn(
                                 "label": ACTIVITY.get(call.name, "working"),
                             }
                         )
+                        if call.name in BUILDS:
+                            coming = _building(token, call.name or "", args)
+                            if coming:
+                                yield _sse(coming)
 
                     elif part.function_response:
                         response = part.function_response
-                        args = pending.pop(response.id or response.name, {})
+                        token = response.id or response.name or ""
+                        args = pending.pop(token, {})
                         if response.name in MUTATING:
                             touched = _touched(
                                 "dashboard_id", args, response.response
@@ -359,11 +524,37 @@ async def stream_turn(
                                     {"type": "proposal", "proposal_id": touched}
                                 )
 
+                        # After the refetch it triggered, and carrying what it
+                        # made, so the placeholder can stay up until the chart
+                        # itself is on the canvas rather than leaving a hole
+                        # for the length of one fetch.
+                        if response.name in BUILDS:
+                            yield _sse(
+                                {
+                                    "type": "built",
+                                    "token": token,
+                                    "panel_id": _made_panel(response.response),
+                                }
+                            )
+
+                        # A tool round trip ends a model call, so what that
+                        # call wrote stops counting as a repeat. Without this
+                        # the second half of a turn could suppress a genuinely
+                        # new line that happens to match the first half.
+                        said = ""
+                        mused = ""
+
+                    # The closing copy of prose already sent in pieces, which is
+                    # the common case and sends nothing.
                     elif getattr(part, "thought", None) and part.text:
-                        yield _sse({"type": "thought", "text": part.text})
+                        if part.text not in mused:
+                            mused = part.text
+                            yield _sse({"type": "thought", "text": part.text})
 
                     elif part.text and event.author != "user":
-                        yield _sse({"type": "text", "text": part.text})
+                        if part.text not in said:
+                            said = part.text
+                            yield _sse({"type": "text", "text": part.text})
 
     except LlmCallsLimitExceededError:
         # The turn hit the ceiling rather than finishing. Whatever it had

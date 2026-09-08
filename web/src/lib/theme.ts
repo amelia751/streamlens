@@ -17,12 +17,26 @@ export const PAPER = "#ffffff";
 export const ACCENT = "#d0021b";
 export const GOOD = "#1a7f37";
 
+/**
+ * A room's masthead, in one place.
+ *
+ * The page and its loading screen both spread this, so the header is drawn
+ * from the first frame and reads the same before and after the data lands.
+ */
 export const ROOMS: Record<
   string,
-  { tone: Tone; kicker: string }
+  { tone: Tone; kicker: string; title: string; lede: string }
 > = {
-  greenlight: { tone: "yellow", kicker: "Promo vs Top 10" },
-  rollout: { tone: "blue", kicker: "Country Top 10" },
-  promo: { tone: "green", kicker: "YouTube" },
-  studio: { tone: "purple", kicker: "Warehouse + analyst" },
+  data: {
+    tone: "yellow",
+    kicker: "Warehouse",
+    title: "Data",
+    lede: "Title performance and YouTube campaigns — the two cuts of the public warehouse.",
+  },
+  studio: {
+    tone: "purple",
+    kicker: "Warehouse + analyst",
+    title: "Studio",
+    lede: "The warehouse, and what you build from it.",
+  },
 };

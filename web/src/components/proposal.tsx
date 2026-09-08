@@ -17,11 +17,21 @@
 import { useEffect, useState } from "react";
 
 import { packRows } from "@/lib/layout";
+import { proposalLink } from "@/lib/links";
 import type { DashboardSummary } from "@/lib/api";
-import type { Proposal } from "@/lib/proposals";
-import { PanelCard } from "@/components/panel";
+import type { Proposal, ProposalPanel } from "@/lib/proposals";
+import { PanelCard, PanelPlaceholder } from "@/components/panel";
 import { Connecting } from "@/components/spinner";
-import { useWorkspace } from "@/components/workspace";
+import { useWorkspace, type Build } from "@/components/workspace";
+
+/** A chart the analyst is adding, holding its cell. See `dashboard.tsx`. */
+type Pending = { id: string; width: number; height: number; build: Build };
+
+type Cell = ProposalPanel | Pending;
+
+function isPending(cell: Cell): cell is Pending {
+  return "build" in cell;
+}
 
 /**
  * The genre colours the whole page, so the vocabulary here has to match
@@ -107,28 +117,64 @@ function Provenance({ proposal }: { proposal: Proposal }) {
 }
 
 function MarketPanels({ proposal }: { proposal: Proposal }) {
-  const { revision } = useWorkspace();
+  const { building, working } = useWorkspace();
 
-  if (proposal.panels.length === 0) {
-    return (
+  // Charts on their way onto this proposal. A pitch is read top to bottom, so
+  // the space for them is held open while their queries run rather than the
+  // section growing under the reader — and held until the chart itself is in
+  // the document, not just saved. Packed with the finished ones, so a chart
+  // landing does not re-share the row it is landing in.
+  const here = new Set(proposal.panels.map((p) => p.id));
+  const arriving = building.filter(
+    (b) =>
+      b.kind === "panel" &&
+      b.proposalId === proposal.id &&
+      !(b.landed && here.has(b.landed)),
+  );
+
+  if (proposal.panels.length === 0 && arriving.length === 0) {
+    return working ? (
+      <p className="report-market-wait is-working">
+        The analyst is working. Charts appear here as they are made.
+      </p>
+    ) : (
       <p className="report-market-wait">
         No chart on this proposal yet — the argument above is still an idea.
       </p>
     );
   }
 
-  const panels = packRows(proposal.panels);
+  const cells = packRows<Cell>([
+    ...proposal.panels,
+    ...arriving.map((b) => ({
+      id: b.token,
+      width: b.width ?? 6,
+      height: b.height ?? 1,
+      build: b,
+    })),
+  ]);
 
   return (
     <div className="report-market-grid">
-      {panels.map((panel) => (
-        <PanelCard
-          key={panel.id}
-          panel={panel}
-          dataUrl={`/api/proposals/${proposal.id}/panels/${panel.id}`}
-          reloadKey={revision}
-        />
-      ))}
+      {cells.map((cell) =>
+        isPending(cell) ? (
+          <PanelPlaceholder
+            key={cell.id}
+            title={cell.build.title}
+            chart={cell.build.chart}
+            width={cell.width}
+            height={cell.height}
+          />
+        ) : (
+          <PanelCard
+            key={cell.id}
+            panel={cell}
+            dataUrl={`/api/proposals/${proposal.id}/panels/${cell.id}`}
+            reference={proposalLink(proposal.id, cell.id)}
+            reloadKey={`${cell.query}|${JSON.stringify(cell.spec)}`}
+          />
+        ),
+      )}
     </div>
   );
 }
@@ -141,18 +187,32 @@ function MarketPanels({ proposal }: { proposal: Proposal }) {
  * coloured field, never a broken `<img>`.
  */
 function Hero({ proposal }: { proposal: Proposal }) {
+  const { building } = useWorkspace();
   // Which URL failed, rather than a boolean — so switching proposals clears
   // the failure by comparison instead of by an effect that resets it.
   const [brokenUrl, setBrokenUrl] = useState<string>();
   const url = proposal.still_url;
   const broken = url !== null && brokenUrl === url;
 
+  // The still is the slowest thing the analyst makes — twenty seconds of
+  // image model — and the gradient it replaces looks finished. Saying so is
+  // the difference between waiting and thinking there is nothing to wait for.
+  const coming = building.some(
+    (b) => b.kind === "still" && b.proposalId === proposal.id,
+  );
+
   return (
-    <header className={`report-hero${!url || broken ? " is-blank" : ""}`}>
+    <header
+      className={`report-hero${!url || broken ? " is-blank" : ""}${
+        coming ? " is-building" : ""
+      }`}
+      aria-busy={coming || undefined}
+    >
       {url && !broken && (
         <img src={url} alt="" onError={() => setBrokenUrl(url)} />
       )}
       <div className="report-hero-veil" />
+      {coming && <p className="report-hero-flag">generating the still</p>}
       <div className="report-hero-copy">
         <p className="report-kicker">Theme proposal</p>
         <h2>{proposal.title}</h2>
@@ -163,30 +223,32 @@ function Hero({ proposal }: { proposal: Proposal }) {
 }
 
 export function ProposalView({ proposalId }: { proposalId: string }) {
-  const [proposal, setProposal] = useState<Proposal>();
-  const [error, setError] = useState<string>();
+  const { revision } = useWorkspace();
+  // One piece of state, so a reload replaces the old document and the old
+  // error together. Never cleared: the canvas gives each proposal its own
+  // component, so a refetch here is always this proposal changing under us —
+  // a chart being adopted, a still finishing — and the page it is replacing is
+  // a better thing to show meanwhile than a spinner.
+  const [state, setState] = useState<{ proposal?: Proposal; error?: string }>({});
+  const { proposal, error } = state;
 
   useEffect(() => {
     const ac = new AbortController();
-    setProposal(undefined);
-    setError(undefined);
     fetch(`/api/proposals/${proposalId}`, { signal: ac.signal })
       .then(async (res) => {
         if (!res.ok) throw new Error(await res.text());
         return res.json() as Promise<Proposal>;
       })
-      .then(setProposal)
+      .then((body) => setState({ proposal: body }))
       .catch((e: unknown) => {
         if (ac.signal.aborted) return;
-        setError(String(e));
+        setState({ error: String(e) });
       });
     return () => ac.abort();
-  }, [proposalId]);
+  }, [proposalId, revision]);
 
   if (error) return <p className="canvas-error">{error}</p>;
-  if (!proposal) {
-    return <Connecting label="Connecting to ClickHouse instance" />;
-  }
+  if (!proposal) return <Connecting />;
 
   return (
     <article className={`report tone-${toneFor(proposal.genre)}`}>

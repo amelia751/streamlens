@@ -30,10 +30,6 @@ export function Shell({
       </header>
 
       {children}
-
-      <footer className="site-foot">
-        Publicly observed. Not Netflix ground truth.
-      </footer>
     </div>
   );
 }

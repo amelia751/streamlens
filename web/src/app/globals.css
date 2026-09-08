@@ -695,15 +695,6 @@ a {
   font-size: 0.8125rem;
 }
 
-.site-foot {
-  margin-top: 1.5rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--line);
-  color: var(--faint);
-  font-size: 0.6875rem;
-  line-height: 1.45;
-}
-
 .title-link {
   appearance: none;
   background: none;
@@ -963,6 +954,76 @@ a {
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
+}
+
+/* ---------------------------------------------------------------- data */
+
+.data-desk {
+  display: grid;
+  grid-template-columns: var(--rail-width) minmax(0, 1fr);
+  grid-template-areas: "rail main";
+  height: calc(100dvh - var(--nav-height));
+}
+
+.data-rail {
+  grid-area: rail;
+}
+
+.data-main {
+  grid-area: main;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.data-section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0.85rem 1.1rem 1rem;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.data-section:last-child {
+  border-bottom: 0;
+}
+
+.data-section:hover {
+  background: var(--wash);
+}
+
+.data-section.on {
+  background: color-mix(in srgb, var(--tone) 28%, white);
+}
+
+.data-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.data-section-title::before {
+  content: "";
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 2px;
+  background: var(--tone);
+}
+
+.data-section-lede {
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
 }
 
 /* ------------------------------------------------------------------ rail */
@@ -1471,6 +1532,11 @@ a {
   margin: 0;
 }
 
+/* A whole-page wait, rather than one panel of it, is worth centring. */
+.shell > .connecting {
+  min-height: 60vh;
+}
+
 .spinner {
   width: 1.25rem;
   height: 1.25rem;
@@ -1786,8 +1852,28 @@ a {
   color: var(--ink);
 }
 
+.tile-copy {
+  flex-shrink: 0;
+  padding: 0 0.2rem;
+  border: 0;
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.tile-copy:hover {
+  color: var(--ink);
+}
+
+.tile-copy.is-copied {
+  color: var(--purple);
+}
+
 .tile-body {
   display: flex;
+  position: relative;
   flex: 1;
   flex-direction: column;
   min-height: 0;
@@ -1800,6 +1886,260 @@ a {
   width: 100%;
   /* Map roam is a drag. Without this the page scrolls instead. */
   touch-action: none;
+}
+
+.filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin: 0 0 0.75rem;
+  padding: 0 0 0.7rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.filter-search {
+  position: relative;
+}
+
+.filter-search input {
+  width: 100%;
+  height: 2rem;
+  padding: 0 1.75rem 0 1.85rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--wash);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.filter-search input::placeholder {
+  color: var(--faint);
+}
+
+.filter-search-icon {
+  position: absolute;
+  top: 50%;
+  left: 0.6rem;
+  width: 0.75rem;
+  height: 0.75rem;
+  color: var(--muted);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.filter-search-clear {
+  position: absolute;
+  top: 50%;
+  right: 0.3rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--faint);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.filter-search-clear:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--line) 70%, white);
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.filter-kicker {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.filter-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.filter-chip,
+.filter-drop-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 1.75rem;
+  padding: 0 0.62rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.filter-chip:hover,
+.filter-drop-btn:hover {
+  color: var(--ink);
+  background: var(--wash);
+}
+
+.filter-chip.on,
+.filter-drop-btn.on {
+  background: var(--wash);
+  color: var(--ink);
+}
+
+.filter-rule {
+  display: none;
+  width: 1px;
+  height: 1.25rem;
+  background: var(--line);
+}
+
+@media (min-width: 640px) {
+  .filter-rule {
+    display: block;
+  }
+}
+
+.filter-drop {
+  position: relative;
+}
+
+.filter-drop-btn span {
+  max-width: 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-chevron {
+  width: 0.55rem;
+  height: 0.4rem;
+  opacity: 0.7;
+  flex: none;
+}
+
+.filter-menu {
+  position: absolute;
+  top: calc(100% + 0.3rem);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  width: 16rem;
+  max-height: 17rem;
+  overflow: auto;
+  padding: 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.filter-menu-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0 0 0.2rem;
+  background: var(--paper);
+}
+
+.filter-menu-search .filter-search-icon {
+  left: 0.5rem;
+}
+
+.filter-menu-search input {
+  width: 100%;
+  height: 1.75rem;
+  padding: 0 0.5rem 0 1.7rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--wash);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.72rem;
+}
+
+.filter-menu-item {
+  display: block;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 0.75rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.filter-menu-item:hover,
+.filter-menu-item.on {
+  background: var(--wash);
+  color: var(--ink);
+}
+
+.filter-menu-empty {
+  margin: 0;
+  padding: 0.55rem 0.5rem;
+  color: var(--faint);
+  font-size: 0.72rem;
+}
+
+.filter-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.filter-meta p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.filter-dot {
+  margin: 0 0.4rem;
+  color: var(--line);
+}
+
+.filter-reset {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.filter-reset:hover {
+  color: var(--ink);
 }
 
 .tile-stat {
@@ -1830,6 +2170,159 @@ a {
   color: var(--muted);
   font-size: 0.75rem;
   text-align: center;
+}
+
+.tile-waiting {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+/* Over the chart box rather than beside it, so ECharts keeps its size. */
+.tile-waiting.is-overlay {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+}
+
+.spinner-sm {
+  width: 0.9rem;
+  height: 0.9rem;
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------------- bones
+ *
+ * A chart the analyst is still making, and a chart whose query has not come
+ * back, are the same thing on screen: a tile of the right size with the right
+ * shape in it and no numbers yet. Both are drawn from the panel's own kind, so
+ * the grid arrives at its layout before the data does and stops moving.
+ */
+
+.bone {
+  display: block;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--ink) 5%, transparent),
+    color-mix(in srgb, var(--ink) 11%, transparent),
+    color-mix(in srgb, var(--ink) 5%, transparent)
+  );
+  background-size: 220% 100%;
+  animation: td-shimmer 1.4s ease-in-out infinite;
+}
+
+.tile-bones {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  padding: 0.4rem 0.4rem 0.15rem;
+}
+
+/* Bars, because a bar and a line both read as "a chart is coming" and a
+   single grey rectangle reads as a failure. */
+.tile-bones.is-chart {
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.35rem;
+}
+
+.tile-bones.is-chart .bone-bar {
+  flex: 1;
+  min-width: 0;
+  border-radius: 3px 3px 0 0;
+}
+
+.tile-bones.is-table {
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 0.55rem;
+  padding-top: 0.7rem;
+}
+
+.tile-bones.is-table .bone-row {
+  height: 0.6rem;
+}
+
+.bone-stat {
+  width: 45%;
+  max-width: 8rem;
+  height: 2rem;
+  border-radius: 6px;
+}
+
+/* A tile with nothing in it yet: same border, quieter, so a half-built board
+   reads as one board rather than as two kinds of thing. */
+.tile.is-building {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--paper) 92%, var(--ink) 8%);
+}
+
+.tile.is-busy .tile-chart,
+.tile.is-busy .tile-stat,
+.tile.is-busy .tile-table-scroll {
+  opacity: 0.45;
+  transition: opacity 0.2s ease;
+}
+
+/* An empty canvas that is not going to stay empty. */
+.canvas-waiting.is-working,
+.report-market-wait.is-working {
+  animation: chat-pulse 1.8s ease-in-out infinite;
+}
+
+/* What is happening to this tile, in the head where its buttons are. */
+.tile-flag {
+  flex-shrink: 0;
+  color: var(--faint);
+  font-size: 0.6rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  animation: chat-pulse 1.6s ease-in-out infinite;
+}
+
+/* The still takes twenty seconds and the gradient it will replace looks
+   finished, so the hero says which of the two it is. */
+.report-hero.is-building::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.09) 50%,
+    transparent 70%
+  );
+  background-size: 250% 100%;
+  animation: td-shimmer 1.9s ease-in-out infinite;
+}
+
+.report-hero-flag {
+  position: absolute;
+  top: 1rem;
+  left: 1.35rem;
+  z-index: 2;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  animation: chat-pulse 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bone,
+  .tile-flag,
+  .report-hero.is-building::after,
+  .report-hero-flag,
+  .canvas-waiting.is-working,
+  .report-market-wait.is-working {
+    animation: none;
+  }
 }
 
 .tile-error {
@@ -1883,8 +2376,12 @@ a {
 }
 
 .chat-new,
-.chat-hide {
+.chat-hide,
+.chat-saved-toggle {
+  display: flex;
   flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
   width: 2.1rem;
   border: 0;
   border-left: 1px solid var(--line);
@@ -1897,21 +2394,6 @@ a {
 
 .chat-new {
   color: var(--muted);
-  font-size: 1.05rem;
-}
-
-.chat-saved-toggle {
-  flex-shrink: 0;
-  padding: 0 0.6rem;
-  border: 0;
-  border-left: 1px solid var(--line);
-  background: none;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .chat-saved-toggle.on {
@@ -1924,6 +2406,34 @@ a {
 .chat-saved-toggle:not(.on):hover {
   background: #ededed;
   color: var(--ink);
+}
+
+.chat-head-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.tip-wrap {
+  display: flex;
+  flex-shrink: 0;
+  align-items: stretch;
+}
+
+.tip {
+  position: fixed;
+  z-index: 50;
+  transform: translateX(-50%);
+  padding: 0.28rem 0.55rem;
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgba(24, 24, 27, 0.14);
 }
 
 /* Renaming happens in place on the tab, so the tab does not resize under
@@ -2008,60 +2518,19 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
-.chat-saved-delete {
-  flex-shrink: 0;
-  width: 1.8rem;
-  border: 0;
-  background: none;
-  color: var(--faint);
-  cursor: pointer;
-  font-size: 0.95rem;
-  line-height: 1;
-}
-
-.chat-saved-delete:hover {
-  color: var(--ink);
-}
-
-.chat-confirm {
-  flex-shrink: 0;
-  padding: 0.65rem 0.85rem 0.7rem;
-  border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--accent) 6%, white);
-}
-
-.chat-confirm p {
-  margin: 0 0 0.45rem;
-  color: var(--ink);
-  font-size: 0.72rem;
-  line-height: 1.4;
-}
-
-.chat-confirm-actions {
+.chat-saved .rail-kebab-wrap {
   display: flex;
-  gap: 0.4rem;
-}
-
-.chat-confirm-actions button {
-  padding: 0.25rem 0.6rem;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--paper);
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 0.68rem;
-  font-weight: 600;
-}
-
-.chat-confirm-actions button:first-child {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: var(--paper);
+  align-items: center;
+  padding-right: 0.2rem;
 }
 
 .chat-reopen {
   /* Same grid cell as the canvas, on the tab strip — never over a chart.
-     Viewport-fixed bottom-right sat on the map once the studio stacked. */
+     Viewport-fixed bottom-right sat on the map once the studio stacked.
+     Sticky under the nav rather than level with it: the nav is sticky too and
+     wins on z-index, so anything flush with it scrolls out of reach. */
+  position: sticky;
+  top: calc(var(--nav-height) + 0.4rem);
   grid-area: main;
   justify-self: end;
   align-self: start;
@@ -2218,6 +2687,19 @@ a {
   text-underline-offset: 2px;
 }
 
+/* A link to something on the canvas, which opens a tab rather than the web. */
+.chat-msg.is-agent a.chat-link {
+  border-radius: 3px;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--purple) 70%, var(--line));
+  color: color-mix(in srgb, var(--purple) 72%, var(--ink));
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.chat-msg.is-agent a.chat-link:hover {
+  background: color-mix(in srgb, var(--purple) 14%, white);
+}
+
 .chat-msg.is-agent blockquote {
   margin: 0 0 0.55rem;
   padding-left: 0.6rem;
@@ -2275,6 +2757,80 @@ a {
   50% {
     opacity: 1;
   }
+}
+
+/* Charts the user pasted in: pending above the box, kept above the message. */
+
+.chat-refs {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  padding: 0.4rem 0.65rem 0;
+}
+
+/* A sent message and its receipts, kept together on the user's side. */
+.chat-said {
+  display: flex;
+  align-self: flex-end;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+  max-width: 88%;
+}
+
+.chat-said .chat-refs {
+  justify-content: flex-end;
+  padding: 0;
+}
+
+.chat-said .chat-msg.is-user {
+  max-width: 100%;
+}
+
+.chat-ref {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border: 1px solid color-mix(in srgb, var(--purple) 35%, var(--line));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--purple) 8%, var(--paper));
+}
+
+.chat-ref-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  overflow: hidden;
+  max-width: 15rem;
+  padding: 0.2rem 0.35rem;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-ref-mark {
+  color: var(--purple);
+  font-size: 0.65rem;
+}
+
+.chat-ref-drop {
+  padding: 0.2rem 0.3rem 0.2rem 0;
+  border: 0;
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.chat-ref-drop:hover {
+  color: var(--ink);
 }
 
 .chat-form {
@@ -2699,13 +3255,62 @@ a {
     min-height: 22rem;
   }
 
+  .data-desk {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "rail"
+      "main";
+    height: auto;
+    min-height: calc(100dvh - var(--nav-height));
+  }
+
+  .data-rail.rail {
+    height: auto;
+    max-height: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .data-rail .rail-panes {
+    flex-direction: row;
+  }
+
+  .data-section {
+    flex: 1;
+    border-bottom: 0;
+    border-right: 1px solid var(--line);
+  }
+
+  .data-section:last-child {
+    border-right: 0;
+  }
+
+  .data-section-lede {
+    display: none;
+  }
+
   .grid-scroll {
     max-height: 70vh;
   }
 
-  .dash-grid {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+  /*
+   * One chart per row once the canvas is this narrow.
+   *
+   * Spans are inline — the packer shares out twelfths per row — so halving the
+   * column count here did not halve them: a `span 6` tile ran off the end of a
+   * six-column grid into implicit columns, which are sized by their contents,
+   * and a table beside a bar chart took twice its width. `!important` is the
+   * one way an author sheet can outrank an inline span, and a full-width chart
+   * is the right answer at this size anyway.
+   */
+  .dash-grid,
+  .report-market-grid {
     grid-auto-rows: minmax(16rem, auto);
+  }
+
+  .dash-grid > .tile,
+  .report-market-grid > .tile {
+    grid-column: 1 / -1 !important;
   }
 
   .tile.is-geo:not(.is-expanded) {

@@ -6,9 +6,7 @@ import { usePathname } from "next/navigation";
 import { ROOMS, type Tone } from "@/lib/theme";
 
 const LINKS: { href: string; label: string; tone: Tone }[] = [
-  { href: "/rooms/greenlight", label: "Greenlight", tone: ROOMS.greenlight.tone },
-  { href: "/rooms/rollout", label: "Rollout", tone: ROOMS.rollout.tone },
-  { href: "/rooms/promo", label: "Promo", tone: ROOMS.promo.tone },
+  { href: "/data", label: "Data", tone: ROOMS.data.tone },
   { href: "/studio", label: "Studio", tone: ROOMS.studio.tone },
 ];
 

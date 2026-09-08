@@ -10,6 +10,7 @@ import type { TablePreview } from "@/lib/api";
 import { commas } from "@/lib/format";
 import { DashboardView } from "@/components/dashboard";
 import { ProposalView } from "@/components/proposal";
+import { Connecting } from "@/components/spinner";
 import { useWorkspace } from "@/components/workspace";
 
 function cellText(value: unknown): string {
@@ -118,7 +119,7 @@ function TableTab({ database, table }: { database: string; table: string }) {
   }, [id, database, table, cached, cache]);
 
   if (error) return <p className="canvas-error">{error}</p>;
-  if (!preview) return <p className="canvas-waiting">Reading {database}.{table}…</p>;
+  if (!preview) return <Connecting label={`Reading ${database}.${table}`} />;
   return <TableGrid preview={preview} />;
 }
 

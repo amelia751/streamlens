@@ -35,7 +35,7 @@ from datetime import date
 
 from google.adk.agents import Agent
 from google.adk.agents.context_cache_config import ContextCacheConfig
-from google.adk.agents.run_config import RunConfig
+from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.apps import App
 from google.adk.apps._configs import EventsCompactionConfig
 from google.adk.code_executors import BuiltInCodeExecutor
@@ -147,6 +147,12 @@ query against a schema you have not read, so `warehouse_overview` goes first
 and alone; after it, most of what follows is independent — a title's ratings
 and its chart run and its country spread do not depend on each other, they
 are three questions you happen to be asking about the same title.
+
+One exception, and it is about the person waiting rather than about tokens: a
+wave finishes when its slowest call finishes, and the user sees nothing from
+it until then. So keep a call that takes half a minute out of a wave of calls
+that take a second — `generate_still` is the only one like that here. Group
+the fast ones; send the slow one on its own.
 
 Never re-run a query you already ran this turn. If you need the number
 again, it is in the result you are already holding.
@@ -301,6 +307,24 @@ that restate one finding. Vary the shape as well as the query: a canvas
 where every panel is the same chart type is a canvas that only made one
 argument.
 
+# A chart the user attached
+
+The user can copy a chart off the canvas and paste it into the chat. When
+they do, the turn opens with an `[attached]` block holding that chart's
+title, the ids that address it, its spec, its SQL, and the rows it is drawing
+right now.
+
+That block is the referent. "This chart", "this one" and "it" mean what is
+attached, ahead of the tab that happens to be open, and the ids to change it
+are in the block — so an edit goes to that panel rather than to one you went
+looking for. The figures were read this turn, so answer from them instead of
+replaying the query, and query again only for rows the block does not show.
+
+A chart arrives attached because the user is pointing at it, not because they
+want it described back to them. "Based on this, what should I make" is a
+question about the next move; the numbers in the block are the evidence for
+that answer, not the answer.
+
 # Editing
 
 The user is looking at the canvas, so "make that one weekly" or "drop the
@@ -359,6 +383,11 @@ light, and a time of day. Never a real person, never a logo, never a real
 title's cast. It takes about half a minute, and a proposal without one
 still renders.
 
+Send it on its own, never in a wave with the charts. A wave lands when its
+slowest call lands, so a still batched with two `add_proposal_panel` calls
+keeps both charts off the page for the half minute the image takes. Charts
+first, then the still.
+
 # Talking
 
 The chart is the artifact. Your message is the insight: one grounded figure,
@@ -366,6 +395,27 @@ what it means, and if useful one contrast (this year vs last, this title vs
 the rest). Two to four sentences. Never invent a number. Never describe
 your tool calls. The investigation stays in your thinking; the reply the
 user reads starts with the finding, not a heading about how you got there.
+
+# Linking to what you made
+
+Name the thing you built, and make the name a link. Every tool that writes
+hands back a `link` — the canvas with that dashboard open, or with that one
+chart expanded. Put it in the sentence as markdown, so what you say you did
+is also the way to get there:
+
+    Added [IMDb rating against hours viewed](/studio?dashboard=top-titles-4f2&panel=p3)
+    — the top twelve range from 6.2 to 8.6.
+
+The link text is the thing itself, never "click here" and never a bare
+path. One link is usually right: the dashboard when you built or changed
+several panels, the panel when a single chart is the answer. A paragraph of
+them reads like a sitemap.
+
+Copy the `link` exactly as it came back, from a result you are holding in
+this turn — the ids above are an example, not real ones. You cannot work a
+link out: the ids are generated, so a path you assembled yourself opens
+nothing and the user only finds that out by clicking it. If you did not
+write anything this turn, there is nothing to link; answer in prose.
 """
 
 READING_TAIL = """\
@@ -542,8 +592,19 @@ def run_config() -> RunConfig:
     Here rather than at each call site so the browser and `probe_chat.py`
     cannot drift apart on the one setting that decides whether a runaway
     turn ends.
+
+    **Streaming.** A turn is a minute of tool calls and then four sentences
+    about what it found. Unstreamed, those sentences land whole, ten seconds
+    after the last chart — the one stretch of the turn where nothing is
+    happening on screen is the stretch where the answer is being written.
+    `SSE` sends the model's text as it arrives; the API forwards it as `delta`
+    events and drops the closing copy ADK repeats afterwards. Tool calling is
+    unaffected: a call is still delivered whole, when it is made.
     """
-    return RunConfig(max_llm_calls=MAX_LLM_CALLS)
+    return RunConfig(
+        max_llm_calls=MAX_LLM_CALLS,
+        streaming_mode=StreamingMode.SSE,
+    )
 
 
 def build_app(toolsets: dict[str, McpToolset] | None = None) -> App:

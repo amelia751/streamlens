@@ -402,6 +402,11 @@ class ChatBody(BaseModel):
     focus_kind: str = ""
     focus_id: str = ""
 
+    # Canvas paths the user pasted into the box, from a panel's copy button.
+    # Stronger than focus and true of this turn only: it is the difference
+    # between "the dashboard I am on" and "this chart, here".
+    attachments: list[str] = []
+
 
 @app.post("/api/chat")
 async def chat(body: ChatBody) -> StreamingResponse:
@@ -417,6 +422,7 @@ async def chat(body: ChatBody) -> StreamingResponse:
             body.session_id,
             focus_kind=body.focus_kind,
             focus_id=body.focus_id,
+            attachments=body.attachments,
         ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},

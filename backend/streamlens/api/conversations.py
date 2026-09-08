@@ -55,7 +55,13 @@ def replay(session: Session) -> list[dict[str, str]]:
     looks broken, but a reopened thread is being read rather than waited on,
     and forty paragraphs of deliberation above the answer is not a
     transcript.
+
+    So is the block describing a chart the user attached. It rides along in
+    the user's own turn, because that is what makes a follow-up work, but it
+    is a spec and a page of rows — nobody typed it, and reading it back as a
+    message would bury the sentence that was typed.
     """
+    from streamlens.api.attachments import MARK
     messages: list[dict[str, str]] = []
 
     for event in session.events or []:
@@ -70,7 +76,7 @@ def replay(session: Session) -> list[dict[str, str]]:
             if getattr(part, "thought", None):
                 continue
             text = (part.text or "").strip()
-            if not text:
+            if not text or text.startswith(MARK):
                 continue
             messages.append({"role": role, "text": text})
 

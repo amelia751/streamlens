@@ -14,20 +14,15 @@ const ROOMS: {
   tone: Tone;
 }[] = [
   {
-    href: "/rooms/greenlight",
-    name: "Greenlight",
-    blurb: "Every title that got YouTube promo, set against its Weekly Top 10 result.",
+    href: "/data?view=titles",
+    name: "By Title Performance",
+    blurb:
+      "YouTube promo against Weekly Top 10 results, and where each title landed country by country.",
     tone: "yellow",
   },
   {
-    href: "/rooms/rollout",
-    name: "Rollout",
-    blurb: "Where each title landed in the Weekly Top 10, country by country.",
-    tone: "blue",
-  },
-  {
-    href: "/rooms/promo",
-    name: "Promo",
+    href: "/data?view=promo",
+    name: "By Youtube Campaigns",
     blurb: "What the 44 Netflix YouTube channels publish, where, and in what format.",
     tone: "green",
   },
@@ -56,7 +51,7 @@ export default async function Home() {
     <Shell
       title="What a studio promotes, against what actually performs"
       kicker="Overview"
-      lede="Three rooms over the public warehouse, and a studio that builds more."
+      lede="Two cuts of the public warehouse on one desk, and a studio that builds more."
     >
       <Stats>
         <Stat
@@ -83,7 +78,7 @@ export default async function Home() {
 
       <p className="kicker">Rooms</p>
       <Reveal delay={0.1}>
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {ROOMS.map((d) => (
             <Link key={d.href} href={d.href} className="dest-card">
               <i className={`swatch tone-${d.tone}`} aria-hidden />

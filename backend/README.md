@@ -162,6 +162,51 @@ threads are kept affordable by `EventsCompactionConfig`, which summarises
 older turns in place instead of dropping them. `/health` reports which
 backends a running process actually got.
 
+## Linking to what it built
+
+"Added the IMDb panel" is not much use if finding the panel is the reader's
+problem. So every tool that writes returns a `link` alongside the id
+([`links.py`](streamlens/links.py)) — `/studio?dashboard=…&panel=…` for a
+chart, `/studio?proposal=…` for a one-sheet — and the instruction has the
+model name what it made as a markdown link using that value verbatim.
+
+The link travels with the result rather than being assembled in the reply
+because the ids are generated: a path the model wrote from memory is a dead
+end the user only discovers by clicking it. The rule in the instruction is
+the same one the tool docstrings state, and it is the whole mechanism — no
+extra channel, and nothing the SSE stream has to carry.
+
+They are real paths, not a private scheme. The chat intercepts a plain click
+and opens the tab, because the canvas is beside the conversation and
+reloading to reach it would be absurd; a modifier-click goes to the browser,
+and the workspace reads the same query string on arrival, so the link also
+works pasted, bookmarked, or opened in a second window.
+
+## Pointing at a chart
+
+The links go the other way too. Every panel has a copy button that puts one on
+the clipboard, and pasting it into the chat attaches that chart to the turn —
+the same gesture as pasting code into a coding agent, and it has to mean the
+same thing: the chart arrives as content, not as an address the model is
+invited to go and look up.
+
+So the browser strips the path out of what was pasted, shows a chip standing
+for the chart, and sends the path back in `attachments`.
+[`attachments.py`](streamlens/api/attachments.py) resolves each one through
+the same stores the tools use and prepends a block to the user's turn: title,
+the ids that address it, the spec, the SQL, and the rows it is drawing right
+now. Resolved server-side because the two costs are not comparable — a panel
+query is a warehouse round trip, while a tool call the model has to decide to
+make is a model round trip and one it can skip. "Based on this chart, what
+would you make" is then answerable on the first call, and it is: measured at
+one model call, no tools.
+
+The block is what `"this chart"` means for that turn, ahead of the open tab,
+and it carries the ids so an edit lands on that panel rather than one the
+model went looking for. It is content, so it stays in the session and a
+follow-up still knows what "it" was; a replayed transcript drops it by its
+`[attached]` marker, because nobody typed a page of sample rows.
+
 ## How the two platforms are used
 
 **Google Cloud** — `gemini-3.8-flash` on the Agent Platform API

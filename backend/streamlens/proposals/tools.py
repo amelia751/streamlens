@@ -27,6 +27,7 @@ from streamlens.dashboards.glance import glance
 from streamlens.dashboards.spec import SpecError
 from streamlens.dashboards.store import DashboardError, run_panel_query
 from streamlens.dashboards.tools import _documents_charts, _spec
+from streamlens.links import proposal_link
 from streamlens.proposals import stills, store
 from streamlens.proposals.spec import (
     ARCHETYPE_NOTE_MAX,
@@ -43,6 +44,17 @@ GENRE_HELP = genre_list()
 
 def _failed(message: str) -> dict[str, Any]:
     return {"ok": False, "problems": [message]}
+
+
+def _linked(result: dict[str, Any], proposal_id: str) -> dict[str, Any]:
+    """Attach the canvas path for the proposal a write actually landed on.
+
+    Only on success. A rejected field means nothing was saved, and a link to
+    a proposal that was not written is worse than none.
+    """
+    if result.get("ok"):
+        result["link"] = proposal_link(proposal_id)
+    return result
 
 
 def _documents_genres(fn):
@@ -69,8 +81,11 @@ def _archetypes(names: list[str], notes: list[str]) -> list[dict[str, str]]:
 
 
 def list_proposals() -> dict[str, Any]:
-    """List every proposal, with its id, title, genre and chart count."""
-    return {"ok": True, "proposals": store.list_proposals()}
+    """List every proposal, with its id, title, genre, chart count and link."""
+    proposals = store.list_proposals()
+    for proposal in proposals:
+        proposal["link"] = proposal_link(str(proposal["id"]))
+    return {"ok": True, "proposals": proposals}
 
 
 def read_proposal(proposal_id: str) -> dict[str, Any]:
@@ -122,7 +137,11 @@ def read_proposal(proposal_id: str) -> dict[str, Any]:
 
     body = proposal.to_dict()
     body["panels"] = panels
-    return {"ok": True, "proposal": body}
+    return {
+        "ok": True,
+        "proposal": body,
+        "link": proposal_link(proposal.id),
+    }
 
 
 @_documents_genres
@@ -139,7 +158,10 @@ def create_proposal(
     archetype_names: list[str] | None = None,
     archetype_notes: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Write a theme proposal and return its id.
+    """Write a theme proposal and return its id and its link.
+
+    `link` is the path that opens the one-sheet on the canvas. Use it,
+    verbatim, when you tell the user what you wrote.
 
     Every field lands in a fixed place on the one-sheet, so each has a hard
     character limit — stated per argument below, and counted on the way in.
@@ -180,7 +202,7 @@ def create_proposal(
     except ProposalSpecError as exc:
         return _failed(str(exc))
 
-    return store.create_proposal(
+    written = store.create_proposal(
         {
             "title": title,
             "genre": genre,
@@ -194,6 +216,7 @@ def create_proposal(
             "archetypes": archetypes,
         }
     )
+    return _linked(written, str(written.get("proposal_id") or ""))
 
 
 def _documents_limits(doc: str) -> str:
@@ -266,7 +289,7 @@ def update_proposal(
             return _failed(str(exc))
 
     try:
-        return store.update_proposal(proposal_id, changes)
+        return _linked(store.update_proposal(proposal_id, changes), proposal_id)
     except store.ProposalError as exc:
         return _failed(str(exc))
 
@@ -296,9 +319,10 @@ def adopt_panel(
         title: retitle it for the proposal, or "" to keep the panel's own.
     """
     try:
-        return store.adopt_panel(proposal_id, dashboard_id, panel_id, title)
+        adopted = store.adopt_panel(proposal_id, dashboard_id, panel_id, title)
     except store.ProposalError as exc:
         return _failed(str(exc))
+    return _linked(adopted, proposal_id)
 
 
 @_documents_charts
@@ -359,7 +383,7 @@ def add_proposal_panel(
             f"unknown chart_type {chart_type!r}; use one of {CHART_TYPE_HELP}"
         )
     try:
-        return store.add_proposal_panel(
+        added = store.add_proposal_panel(
             proposal_id,
             title,
             query,
@@ -380,6 +404,7 @@ def add_proposal_panel(
         )
     except (store.ProposalError, DashboardError, SpecError) as exc:
         return _failed(str(exc))
+    return _linked(added, proposal_id)
 
 
 def delete_proposal_panel(proposal_id: str, panel_id: str) -> dict[str, Any]:
@@ -420,7 +445,11 @@ def generate_still(
             f"unknown aspect_ratio {aspect_ratio!r}; use one of "
             f"{', '.join(ASPECT_RATIOS)}"
         )
-    return stills.generate_still(proposal_id, prompt, aspect_ratio)
+    # `url` in the result is where the image itself lives, which is not
+    # somewhere to send a reader; `link` is the one-sheet it now sits on.
+    return _linked(
+        stills.generate_still(proposal_id, prompt, aspect_ratio), proposal_id
+    )
 
 
 def delete_proposal(proposal_id: str) -> dict[str, Any]:

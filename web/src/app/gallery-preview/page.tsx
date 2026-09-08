@@ -7,18 +7,31 @@ import { useEffect, useState } from "react";
 
 import type { Dashboard } from "@/lib/api";
 import { PanelCard } from "@/components/panel";
+import { Connecting } from "@/components/spinner";
 
 export default function GalleryPreview() {
   const [dashboard, setDashboard] = useState<Dashboard>();
+  const [missing, setMissing] = useState(false);
 
   useEffect(() => {
     fetch("/api/dashboards/chart-gallery")
-      .then((r) => r.json())
-      .then(setDashboard)
-      .catch(() => undefined);
+      .then(async (r) => {
+        // A 404 still has a JSON body, and rendering that as a dashboard is
+        // how this page used to crash instead of saying what was wrong.
+        if (!r.ok) throw new Error(String(r.status));
+        setDashboard(await r.json());
+      })
+      .catch(() => setMissing(true));
   }, []);
 
-  if (!dashboard) return <p style={{ padding: 24 }}>Loading…</p>;
+  if (missing) {
+    return (
+      <p className="canvas-waiting">
+        No <code>chart-gallery</code> dashboard in the warehouse.
+      </p>
+    );
+  }
+  if (!dashboard) return <Connecting />;
 
   return (
     <div

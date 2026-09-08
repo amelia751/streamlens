@@ -18,6 +18,7 @@ from typing import Any
 from streamlens.dashboards import charts, store
 from streamlens.dashboards.glance import glance
 from streamlens.dashboards.spec import SpecError
+from streamlens.links import dashboard_link
 from streamlens.services.clickhouse.catalog import read_schema_brief
 
 CHART_TYPE_HELP = charts.type_list()
@@ -68,6 +69,18 @@ def _spec(
 
 def _failed(message: str) -> dict[str, Any]:
     return {"ok": False, "problems": [message]}
+
+
+def _linked(result: dict[str, Any], dashboard_id: str) -> dict[str, Any]:
+    """Attach the canvas path for what a write actually saved.
+
+    Only on success, and pointing at the panel when there is one: a link to
+    a panel that was rejected would open an empty canvas, and the model has
+    no way to tell the difference from the id alone.
+    """
+    if result.get("ok"):
+        result["link"] = dashboard_link(dashboard_id, result.get("panel_id") or "")
+    return result
 
 
 def warehouse_overview() -> dict[str, Any]:
@@ -189,6 +202,7 @@ def read_panels(dashboard_id: str, panel_id: str = "") -> dict[str, Any]:
                 "sample_rows": result["rows"][:12],
                 "row_count": len(result["rows"]),
                 "glance": glance(result["columns"], result["types"], result["rows"]),
+                "link": dashboard_link(dashboard.id, panel.id),
             }
         )
     return {
@@ -196,12 +210,16 @@ def read_panels(dashboard_id: str, panel_id: str = "") -> dict[str, Any]:
         "dashboard_id": dashboard.id,
         "title": dashboard.title,
         "panels": panels,
+        "link": dashboard_link(dashboard.id),
     }
 
 
 def list_dashboards() -> dict[str, Any]:
-    """List every dashboard, with its id, title and panel count."""
-    return {"ok": True, "dashboards": store.list_dashboards()}
+    """List every dashboard, with its id, title, panel count and link."""
+    dashboards = store.list_dashboards()
+    for dashboard in dashboards:
+        dashboard["link"] = dashboard_link(str(dashboard["id"]))
+    return {"ok": True, "dashboards": dashboards}
 
 
 def get_dashboard(dashboard_id: str) -> dict[str, Any]:
@@ -211,15 +229,25 @@ def get_dashboard(dashboard_id: str) -> dict[str, Any]:
         dashboard_id: the dashboard's id, as returned by list_dashboards.
     """
     try:
-        return {"ok": True, "dashboard": store.get_dashboard(dashboard_id).to_dict()}
+        dashboard = store.get_dashboard(dashboard_id)
     except store.DashboardError as exc:
         return _failed(str(exc))
 
+    body = dashboard.to_dict()
+    for panel in body.get("panels", []):
+        panel["link"] = dashboard_link(dashboard.id, str(panel["id"]))
+    return {
+        "ok": True,
+        "dashboard": body,
+        "link": dashboard_link(dashboard.id),
+    }
+
 
 def create_dashboard(title: str, description: str = "") -> dict[str, Any]:
-    """Create an empty dashboard and return its id.
+    """Create an empty dashboard and return its id and its link.
 
-    Add panels to it with add_panel.
+    Add panels to it with add_panel. `link` is the path that opens it on the
+    canvas — use it, verbatim, when you tell the user what you made.
 
     Args:
         title: a short human title, e.g. "YouTube promo performance".
@@ -229,7 +257,11 @@ def create_dashboard(title: str, description: str = "") -> dict[str, Any]:
         dashboard_id = store.create_dashboard(title, description)
     except store.DashboardError as exc:
         return _failed(str(exc))
-    return {"ok": True, "dashboard_id": dashboard_id}
+    return {
+        "ok": True,
+        "dashboard_id": dashboard_id,
+        "link": dashboard_link(dashboard_id),
+    }
 
 
 def update_dashboard(
@@ -250,7 +282,11 @@ def update_dashboard(
         )
     except store.DashboardError as exc:
         return _failed(str(exc))
-    return {"ok": True, "dashboard_id": dashboard_id}
+    return {
+        "ok": True,
+        "dashboard_id": dashboard_id,
+        "link": dashboard_link(dashboard_id),
+    }
 
 
 def delete_dashboard(dashboard_id: str) -> dict[str, Any]:
@@ -290,6 +326,9 @@ def add_panel(
     checked against what the query actually returned. If any is missing the
     panel is NOT saved and the problems come back with the real column list.
 
+    A saved panel comes back with `link`: the path that opens this dashboard
+    with this chart expanded. Use it, verbatim, when you say what you added.
+
     Args:
         dashboard_id: the dashboard to add to.
         title: the panel's title.
@@ -322,7 +361,7 @@ def add_panel(
     if kind is None:
         return _failed(f"unknown chart_type {chart_type!r}; use one of {CHART_TYPE_HELP}")
     try:
-        return store.add_panel(
+        added = store.add_panel(
             dashboard_id,
             title,
             query,
@@ -343,6 +382,7 @@ def add_panel(
         )
     except (store.DashboardError, SpecError) as exc:
         return _failed(str(exc))
+    return _linked(added, dashboard_id)
 
 
 @_documents_charts
@@ -371,6 +411,9 @@ def update_panel(
     "leave as is". To change the chart type or any of its columns, pass
     chart_type together with the columns it needs — they are replaced as a
     set, not merged.
+
+    Comes back with `link`, the path that opens this chart expanded on the
+    canvas. Use it, verbatim, when you say what you changed.
 
     Args:
         dashboard_id: the dashboard the panel is on.
@@ -413,7 +456,7 @@ def update_panel(
         )
 
     try:
-        return store.update_panel(
+        changed = store.update_panel(
             dashboard_id,
             panel_id,
             title=title or None,
@@ -425,6 +468,7 @@ def update_panel(
         )
     except (store.DashboardError, SpecError) as exc:
         return _failed(str(exc))
+    return _linked(changed, dashboard_id)
 
 
 def delete_panel(dashboard_id: str, panel_id: str) -> dict[str, Any]:
