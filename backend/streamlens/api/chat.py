@@ -9,13 +9,13 @@ wrong about what it built and the canvas still shows the truth.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import AsyncIterator
 
 from google.adk.agents.invocation_context import LlmCallsLimitExceededError
 from google.adk.runners import Runner
-from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 log = logging.getLogger(__name__)
@@ -28,6 +28,15 @@ from streamlens.agents.analyst.agent import (  # noqa: E402
     FOCUS_KIND,
     MAX_LLM_CALLS,
 )
+from streamlens.agents.analyst.sessions import (  # noqa: E402
+    memory_service,
+    session_service,
+)
+
+# What the rail calls a conversation. Session state rather than a table of our
+# own, so it is stored, listed and deleted by whatever backend is holding the
+# transcript.
+TITLE_KEY = "conversation_title"
 
 # Tools that change what is on the canvas. Anything here triggers a refetch.
 MUTATING = {
@@ -84,8 +93,94 @@ ACTIVITY = {
     "generate_still": "generating the still",
 }
 
-# Conversation history outlives any one turn; the MCP connections do not.
-_sessions = InMemorySessionService()
+def human_error(exc: BaseException) -> str:
+    """A sentence for the transcript, rather than whatever the exception says.
+
+    Vertex serves its 5xx as a Google error page, so the unedited string is a
+    kilobyte of HTML — in the chat log that makes a blip Google tells you to
+    retry in thirty seconds look like a broken product. Anything unrecognised
+    still comes through, flattened and clipped, because a wrong guess about
+    the cause is worse than an ugly message.
+    """
+    from google.genai import errors as genai_errors
+
+    if isinstance(exc, genai_errors.ServerError):
+        return (
+            "Vertex AI was briefly unavailable and the turn stopped part way. "
+            "Anything already on the canvas is saved — ask again in a moment."
+        )
+    if isinstance(exc, genai_errors.ClientError):
+        return (
+            f"The model rejected that request ({exc.code}). If it was a long "
+            "one, try asking for less at once."
+        )
+    return " ".join(str(exc).split())[:300] or exc.__class__.__name__
+
+
+def conversation_title(text: str) -> str:
+    """A thread's name, taken from the request that opened it.
+
+    The user never has to name a conversation, and an untitled row in a rail
+    is unusable once there are three of them.
+    """
+    flat = " ".join(text.split())
+    return flat if len(flat) <= 60 else f"{flat[:59]}\u2026"
+
+
+# Ingesting a finished turn into memory is an API call that writes what the
+# analyst should recall later. It happens after the answer has been streamed,
+# so it must not be awaited in the request — but a bare task is garbage
+# collected mid-flight, so the references are held here until it finishes.
+_remembering: set[asyncio.Task] = set()
+
+# Memory Bank buffers what it is sent and distils it into memories when the
+# conversation goes quiet, rather than after every turn. A minute is short
+# enough that a thread opened after this one can recall it, and long enough
+# that a five-turn conversation is summarised once instead of five times.
+INGEST_METADATA: dict[str, object] = {
+    "generation_trigger_config": {"generation_rule": {"idle_duration": "60s"}},
+}
+
+
+def remember(session_id: str, user: str, since: int) -> None:
+    """Send this turn's events to the memory service, in the background.
+
+    `since` is how many events the session had before the turn, so only the
+    new ones are sent. This is a stream, not a snapshot: re-sending the whole
+    session every turn would hand the same exchange to the extractor five
+    times over and pay for it each time.
+
+    The session is read back from its store rather than kept from the run, so
+    what is remembered is what was actually persisted.
+
+    Failures are logged and dropped. Losing a memory costs the analyst some
+    context in a later thread; failing the turn over it would cost the user
+    the answer they were waiting for.
+    """
+
+    async def ingest() -> None:
+        try:
+            session = await session_service().get_session(
+                app_name=APP_NAME, user_id=user, session_id=session_id
+            )
+            if session is None:
+                return
+            fresh = (session.events or [])[since:]
+            if not fresh:
+                return
+            await memory_service().add_events_to_memory(
+                app_name=APP_NAME,
+                user_id=user,
+                events=fresh,
+                session_id=session_id,
+                custom_metadata={"stream_id": session_id, **INGEST_METADATA},
+            )
+        except Exception:
+            log.exception("could not add session %s to memory", session_id)
+
+    task = asyncio.create_task(ingest())
+    _remembering.add(task)
+    task.add_done_callback(_remembering.discard)
 
 
 async def unreachable(toolsets: dict) -> list[str]:
@@ -106,16 +201,28 @@ async def unreachable(toolsets: dict) -> list[str]:
     return broken
 
 
-async def ensure_session(runner: Runner, session_id: str, user: str) -> str:
+async def ensure_session(
+    runner: Runner, session_id: str, user: str
+) -> tuple[str, bool, int]:
+    """The session for this id, created if the browser has not used it yet.
+
+    Returns whether it still needs a name — the first request is the only one
+    that describes the whole conversation — and how many events it already
+    has, which is where this turn's contribution to memory begins.
+    """
     existing = await runner.session_service.get_session(
         app_name=APP_NAME, user_id=user, session_id=session_id
     )
     if existing:
-        return existing.id
+        return (
+            existing.id,
+            not (existing.state or {}).get(TITLE_KEY),
+            len(existing.events or []),
+        )
     created = await runner.session_service.create_session(
         app_name=APP_NAME, user_id=user, session_id=session_id
     )
-    return created.id
+    return created.id, True, len(created.events or [])
 
 
 def _sse(event: dict) -> str:
@@ -161,6 +268,10 @@ async def stream_turn(
     standing fact about the canvas instead of as something the user just
     said — and so a turn that changes tabs corrects the referent instead of
     stacking a second one.
+
+    The session store and the memory service outlive the turn. The transcript
+    is what makes "make that weekly" work; memory is what makes it work
+    tomorrow, in a thread that has not been opened yet.
     """
     from streamlens.agents.analyst import build_app, build_toolsets, run_config
 
@@ -169,7 +280,8 @@ async def stream_turn(
     # context caching the terminal runner measures.
     runner = Runner(
         app=build_app(toolsets),
-        session_service=_sessions,
+        session_service=session_service(),
+        memory_service=memory_service(),
     )
 
     content = types.Content(role="user", parts=[types.Part(text=message)])
@@ -177,8 +289,11 @@ async def stream_turn(
     # remember what each call was for and resolve it when the result lands.
     pending: dict[str, dict] = {}
 
+    turn_starts_at = 0
     try:
-        session_id = await ensure_session(runner, session_id, user)
+        session_id, unnamed, turn_starts_at = await ensure_session(
+            runner, session_id, user
+        )
 
         broken = await unreachable(toolsets)
         if broken:
@@ -199,10 +314,15 @@ async def stream_turn(
                 session_id=session_id,
                 new_message=content,
                 # Overwritten every turn, including with "" when nothing is
-                # open, so the referent never outlives the tab.
+                # open, so the referent never outlives the tab. The title is
+                # written the same way — through an event, which is what makes
+                # a persistent session service actually save it.
                 state_delta={
                     FOCUS_KIND: focus_kind or "",
                     FOCUS_ID: focus_id or "",
+                    **(
+                        {TITLE_KEY: conversation_title(message)} if unnamed else {}
+                    ),
                 },
                 run_config=run_config(),
             ):
@@ -263,7 +383,7 @@ async def stream_turn(
 
     except Exception as exc:
         log.exception("chat turn failed")
-        yield _sse({"type": "error", "message": str(exc)})
+        yield _sse({"type": "error", "message": human_error(exc)})
 
     finally:
         # Closes the HTTP session and reaps the stdio subprocess.
@@ -271,5 +391,7 @@ async def stream_turn(
             await runner.close()
         except Exception:
             log.exception("closing the turn's runner failed")
+        # After the answer, never in front of it.
+        remember(session_id, user, turn_starts_at)
 
     yield _sse({"type": "done"})

@@ -288,7 +288,9 @@ export function PanelCard({
 
   return (
     <article
-      className={`tile${expanded ? " is-expanded" : ""}`}
+      className={`tile${expanded ? " is-expanded" : ""}${
+        kind === "map" || kind === "lines" ? " is-geo" : ""
+      }`}
       style={
         expanded
           ? undefined

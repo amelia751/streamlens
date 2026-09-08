@@ -10,6 +10,9 @@ secrets/
 # Isolated gcloud CLI state (do not use ~/.config/gcloud)
 .gcloud/
 
+# Saved conversations (local SQLite session store)
+backend/.data/
+
 # Downloaded dumps — scripts and READMEs stay tracked
 data/**/*.xlsx
 data/**/*.xls

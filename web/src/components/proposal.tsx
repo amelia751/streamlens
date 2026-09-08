@@ -20,6 +20,7 @@ import { packRows } from "@/lib/layout";
 import type { DashboardSummary } from "@/lib/api";
 import type { Proposal } from "@/lib/proposals";
 import { PanelCard } from "@/components/panel";
+import { Connecting } from "@/components/spinner";
 import { useWorkspace } from "@/components/workspace";
 
 /**
@@ -184,12 +185,7 @@ export function ProposalView({ proposalId }: { proposalId: string }) {
 
   if (error) return <p className="canvas-error">{error}</p>;
   if (!proposal) {
-    return (
-      <article className="report is-loading">
-        <div className="report-hero" />
-        <p className="canvas-waiting">Opening proposal…</p>
-      </article>
-    );
+    return <Connecting label="Connecting to ClickHouse instance" />;
   }
 
   return (

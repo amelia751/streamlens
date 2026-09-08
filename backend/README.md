@@ -127,6 +127,41 @@ never told about a tool it does not have — which is the failure mode this
 replaces, where a toolset quietly fails to load and the model reads as
 though it were refusing to work.
 
+## Where a conversation lives
+
+Turns are stateless — the MCP connections open and close with each one — but
+conversations are not, so they are kept outside the process by ADK's session
+and memory services ([`agents/analyst/sessions.py`](streamlens/agents/analyst/sessions.py)).
+A **session** is one thread, replayed to the model every turn, which is what
+makes "add that to the dashboard" land. **Memory** is every other thread,
+searched rather than replayed, which is what lets a new conversation pick up
+"the Shorts dashboard from yesterday" without paying for yesterday's tokens.
+
+| `STREAMLENS_SESSION_BACKEND` | service | where threads live |
+|---|---|---|
+| `db` (default) | `DatabaseSessionService` | `STREAMLENS_SESSION_DB_URL`, or a SQLite file in `.data/` |
+| `vertex` | `VertexAiSessionService` | the Agent Runtime the analyst deploys to |
+| `memory` | `InMemorySessionService` | nowhere; tests only |
+
+Production is Cloud SQL for Postgres:
+
+```bash
+STREAMLENS_SESSION_DB_URL=postgresql+asyncpg://user:pw@host/streamlens
+```
+
+Postgres rather than SQLite because `DatabaseSessionService` serialises
+writes to a single session with `SELECT ... FOR UPDATE` there, which is what
+makes two API replicas safe on one conversation. Either way the driver must
+be async: `sqlite+aiosqlite`, not `sqlite`.
+
+Memory is Memory Bank on the same Agent Runtime by default
+(`STREAMLENS_MEMORY_BACKEND=vertex`; `memory` for a keyword store in
+process, `off` for no cross-thread recall). `PreloadMemoryTool` searches it
+with the user's own words each turn, so recall costs no round trip. Long
+threads are kept affordable by `EventsCompactionConfig`, which summarises
+older turns in place instead of dropping them. `/health` reports which
+backends a running process actually got.
+
 ## How the two platforms are used
 
 **Google Cloud** — `gemini-3.8-flash` on the Agent Platform API

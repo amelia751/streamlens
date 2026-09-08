@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Dashboard } from "@/lib/api";
 import { packRows } from "@/lib/layout";
 import { PanelCard } from "@/components/panel";
+import { Connecting } from "@/components/spinner";
 import { useWorkspace } from "@/components/workspace";
 
 export function DashboardView({ dashboardId }: { dashboardId: string }) {
@@ -54,7 +55,9 @@ export function DashboardView({ dashboardId }: { dashboardId: string }) {
   );
 
   if (error) return <p className="canvas-error">{error}</p>;
-  if (!dashboard) return <p className="canvas-waiting">Loading dashboard…</p>;
+  if (!dashboard) {
+    return <Connecting label="Connecting to ClickHouse instance" />;
+  }
 
   // Widths are the analyst's sense of what matters, not a literal span;
   // the grid decides the rest.

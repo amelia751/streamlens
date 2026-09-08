@@ -436,7 +436,7 @@ function shadeScale(
     // A flat sheet of one colour is what a zero-width range produces.
     min,
     max: max > min ? max : min + 1,
-    calculable: true,
+    calculable: false,
     orient: "horizontal" as const,
     left: "center" as const,
     bottom: 4,
@@ -1505,6 +1505,9 @@ function mapOption(frame: Frame, spec: PanelSpec, atlas?: WorldAtlas): EChartsOp
       tooltip: {
         ...CARD,
         trigger: "item" as const,
+        // A short tile puts the cursor near the edge; without this the
+        // card paints off the panel and looks like hover is broken.
+        confine: true,
         formatter: (params: unknown) => {
           const p = params as { name: string; value: number };
           return tip(p.name, [
@@ -1517,7 +1520,15 @@ function mapOption(frame: Frame, spec: PanelSpec, atlas?: WorldAtlas): EChartsOp
           ]);
         },
       },
-      visualMap: shadeScale(min, max, spec.format),
+      // `calculable` puts drag handles on the key. On a short tile those
+      // handles sit on the map and eat every mousemove, which is why hover
+      // and pan die as soon as the panel shrinks. The key is a legend here,
+      // not a filter.
+      visualMap: {
+        ...shadeScale(min, max, spec.format),
+        calculable: false,
+        hoverLink: false,
+      },
       // Territories too small to appear at this resolution are dropped, and
       // a choropleth that quietly loses rows is worse than one that admits it.
       graphic: unplaced
@@ -1555,6 +1566,7 @@ function mapOption(frame: Frame, spec: PanelSpec, atlas?: WorldAtlas): EChartsOp
             [-180, 83],
             [180, -56],
           ] as [[number, number], [number, number]],
+          scaleLimit: { min: 0.8, max: 6 },
           selectedMode: false as const,
           label: { show: false },
           itemStyle: { areaColor: "#f4f4f5", borderColor: PAPER, borderWidth: 0.8 },
@@ -1567,16 +1579,26 @@ function mapOption(frame: Frame, spec: PanelSpec, atlas?: WorldAtlas): EChartsOp
     },
     media: [
       {
+        // A 13-rem row at the 900px breakpoint is ~150px of chart. The
+        // world map is cropped to fill that box, so without roam the
+        // pointer can only see a strip of ocean.
+        query: { maxHeight: 260 },
+        option: {
+          visualMap: { itemHeight: 88, calculable: false },
+          series: [{ roam: true, top: 2, bottom: 26 }],
+        },
+      },
+      {
         query: { maxWidth: NARROW },
         option: {
-          visualMap: { itemHeight: 110 },
-          series: [{ top: 2, bottom: 36 }],
+          visualMap: { itemHeight: 96, calculable: false },
+          series: [{ roam: true, top: 2, bottom: 28 }],
         },
       },
       {
         option: {
-          visualMap: { itemHeight: 180 },
-          series: [{ top: 2, bottom: 40 }],
+          visualMap: { itemHeight: 180, calculable: false },
+          series: [{ roam: false, top: 2, bottom: 40 }],
         },
       },
     ],

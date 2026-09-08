@@ -37,11 +37,15 @@ from google.adk.agents import Agent
 from google.adk.agents.context_cache_config import ContextCacheConfig
 from google.adk.agents.run_config import RunConfig
 from google.adk.apps import App
+from google.adk.apps._configs import EventsCompactionConfig
 from google.adk.code_executors import BuiltInCodeExecutor
 from google.adk.planners import BuiltInPlanner
 from google.adk.tools.google_search_tool import GoogleSearchTool
 from google.adk.tools.mcp_tool import McpToolset
+from google.adk.tools.preload_memory_tool import PreloadMemoryTool
 from google.genai import types
+
+from streamlens.agents.analyst.sessions import memory_enabled
 
 from streamlens.dashboards import charts
 from streamlens.mcp.toolset import dashboard_toolset, proposal_toolset
@@ -189,6 +193,31 @@ does not.
 
 The code sandbox is for a ratio or a distribution you already fetched. Do
 not re-query to add two numbers.
+
+# What you remember
+
+This conversation is on the record, so a follow-up means what it says. "Make
+that weekly", "add it to the dashboard", "same thing for films" all refer to
+what you did earlier in *this* thread, and you already have it — do not ask
+the user to repeat what a chart was.
+
+You may also be handed notes from earlier conversations with this user, in a
+PAST_CONVERSATIONS block. Treat them as a reminder of what they are working
+on and how they like it presented — not as data. A figure in that block is
+stale by definition: if you are going to state it, query it again first. A
+dashboard mentioned there may have been deleted, so read it before you edit
+it. And never open with what you remember; answer the question.
+
+Those notes never decide what "that" or "those" means. Resolve a reference
+against this thread first, then the canvas in focus; a past conversation is
+the last place to look and only when neither has a candidate. If the user
+counted 44 channels here and a remembered thread was about ten of them,
+"those channels" is the 44.
+
+A long thread is summarised as it grows, so the oldest turns reach you as a
+recap rather than in full. If the recap is not specific enough to act on —
+which panel, which title, which week — look it up with `get_dashboard` or
+`read_panels` instead of guessing from the summary.
 """
 
 AUTHORING = """\
@@ -335,7 +364,8 @@ still renders.
 The chart is the artifact. Your message is the insight: one grounded figure,
 what it means, and if useful one contrast (this year vs last, this title vs
 the rest). Two to four sentences. Never invent a number. Never describe
-your tool calls.
+your tool calls. The investigation stays in your thinking; the reply the
+user reads starts with the finding, not a heading about how you got there.
 """
 
 READING_TAIL = """\
@@ -343,7 +373,8 @@ READING_TAIL = """\
 
 Your message is the answer: one grounded figure, what it means, and if
 useful one contrast. Two to four sentences. Never invent a number. Never
-describe your tool calls.
+describe your tool calls. Start with the finding, not a heading about
+how you got there.
 """
 
 # The chart list comes from the registry rather than from prose, so the agent
@@ -452,6 +483,12 @@ def build_agent(toolsets: dict[str, McpToolset] | None = None) -> Agent:
     # Gemini 3 can mix Search with function tools; ADK still wraps it as a
     # sub-agent whenever other tools are present. bypass=True is that wrap.
     tools.append(GoogleSearchTool(bypass_multi_tools_limit=True))
+    if memory_enabled():
+        # Not a tool the model calls. It searches memory with the user's own
+        # message and prepends what it finds, which is the behaviour we want:
+        # recall should not cost a round trip, and a model deciding whether to
+        # look does not look on the turn where it matters.
+        tools.append(PreloadMemoryTool())
     return Agent(
         name="streamlens_analyst",
         model=gemini_model(),
@@ -519,6 +556,20 @@ def build_app(toolsets: dict[str, McpToolset] | None = None) -> App:
     optimisation; it is most of the tokens. `min_tokens` leaves short turns
     alone, where the bookkeeping would cost more than it saves.
 
+    **Compaction.** A saved conversation grows without limit, and every turn
+    resends all of it. One dashboard build is fifty tool calls whose results
+    are the bulk of those tokens, so by the fourth or fifth request a thread
+    is slower and dearer than the first — for history the user is no longer
+    asking about. ADK summarises the older invocations into a recap and keeps
+    the recent ones whole.
+
+    Both triggers are set, because they fail in different directions. The
+    sliding window fires on a turn count, which is predictable but blind to
+    size; the token threshold catches the single turn that read half the
+    warehouse and would otherwise sit in context for the rest of the day.
+    The summariser defaults to this agent's own model, so a recap is written
+    by the model that will read it.
+
     Used by the API and by `scripts/ask_agent.py`, so what is measured in
     the terminal is what the browser gets.
     """
@@ -532,6 +583,19 @@ def build_app(toolsets: dict[str, McpToolset] | None = None) -> App:
             ttl_seconds=1800,
             # Below this the prefix is not big enough to be worth caching.
             min_tokens=2048,
+        ),
+        events_compaction_config=EventsCompactionConfig(
+            # Every fourth request, keeping one invocation of overlap so the
+            # recap and the live history share a seam rather than butting up
+            # against each other.
+            compaction_interval=4,
+            overlap_size=1,
+            # And whenever the prompt gets genuinely large, whatever the turn
+            # count says. 200k of a 1M window leaves room for the tool results
+            # of the turn in flight; the last 30 events stay verbatim, which
+            # covers the request being followed up on.
+            token_threshold=200_000,
+            event_retention_size=30,
         ),
     )
 

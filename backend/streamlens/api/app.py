@@ -1,6 +1,6 @@
 """FastAPI surface for the Streamlens dashboards and proposals.
 
-Four kinds of route:
+Five kinds of route:
 
     /api/query/{name}   deterministic reads from the named registry, used by
                         every chart. No model in the path.
@@ -8,6 +8,8 @@ Four kinds of route:
                         each panel.
     /api/proposals      the one-sheets the agent writes for filmmakers: the
                         prose, the charts each one owns, and its stills.
+    /api/conversations  saved threads with the analyst, read back out of the
+                        ADK session store rather than out of a table here.
     /mcp/*              the same tools spoken as MCP, for our agent and for
                         any other MCP client.
 
@@ -94,9 +96,11 @@ def client():
 
 @app.get("/health")
 def health() -> dict[str, Any]:
+    from streamlens.agents.analyst.sessions import describe
+
     try:
         version = client().command("SELECT version()")
-        return {"ok": True, "clickhouse": version}
+        return {"ok": True, "clickhouse": version, "storage": describe()}
     except Exception as exc:
         log.exception("health check failed")
         raise HTTPException(503, f"clickhouse unreachable: {exc}") from exc
@@ -332,6 +336,60 @@ def proposal_still(proposal_id: str, still_id: str) -> Response:
         media_type=content_type,
         headers={"Cache-Control": "private, max-age=31536000, immutable"},
     )
+
+
+class ConversationBody(BaseModel):
+    title: str = ""
+
+
+@app.get("/api/conversations")
+async def conversations() -> dict[str, Any]:
+    """Saved threads with the analyst, for the conversation tabs."""
+    from streamlens.api.conversations import list_conversations
+
+    try:
+        return {"conversations": await list_conversations()}
+    except Exception as exc:
+        log.exception("listing conversations failed")
+        raise HTTPException(502, f"session store unreachable: {exc}") from exc
+
+
+@app.get("/api/conversations/{conversation_id}")
+async def conversation(conversation_id: str) -> dict[str, Any]:
+    """One thread, replayed as the messages a person would recognise."""
+    from streamlens.api.conversations import ConversationError, read_conversation
+
+    try:
+        return await read_conversation(conversation_id)
+    except ConversationError as exc:
+        raise HTTPException(404, str(exc)) from None
+    except Exception as exc:
+        log.exception("reading conversation %s failed", conversation_id)
+        raise HTTPException(502, f"session store unreachable: {exc}") from exc
+
+
+@app.patch("/api/conversations/{conversation_id}")
+async def rename(conversation_id: str, body: ConversationBody) -> dict[str, Any]:
+    from streamlens.api.conversations import ConversationError, rename_conversation
+
+    try:
+        return await rename_conversation(conversation_id, body.title)
+    except ConversationError as exc:
+        raise HTTPException(404, str(exc)) from None
+    except Exception as exc:
+        log.exception("renaming conversation %s failed", conversation_id)
+        raise HTTPException(502, f"session store unreachable: {exc}") from exc
+
+
+@app.delete("/api/conversations/{conversation_id}")
+async def forget(conversation_id: str) -> dict[str, Any]:
+    from streamlens.api.conversations import delete_conversation
+
+    try:
+        return await delete_conversation(conversation_id)
+    except Exception as exc:
+        log.exception("deleting conversation %s failed", conversation_id)
+        raise HTTPException(502, f"session store unreachable: {exc}") from exc
 
 
 class ChatBody(BaseModel):

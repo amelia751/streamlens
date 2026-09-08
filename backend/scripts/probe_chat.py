@@ -213,11 +213,17 @@ async def main() -> int:
         help="what the first turn should think is open on the canvas",
     )
     parser.add_argument("--focus-id", default="", help="its id")
+    parser.add_argument(
+        "--session",
+        default="",
+        help="reuse a saved conversation instead of starting one, so a "
+        "follow-up can be sent after a restart",
+    )
     args = parser.parse_args()
 
     prompts = args.prompts or ["What could you build me from this warehouse?"]
     # One session across prompts, so turn two can say "make that weekly".
-    session = f"probe-{uuid.uuid4().hex[:8]}"
+    session = args.session or f"probe-{uuid.uuid4().hex[:8]}"
     print(f"{GREY}session {session} -> {args.url}{OFF}")
 
     turns: list[Turn] = []
