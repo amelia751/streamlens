@@ -35,6 +35,7 @@ from datetime import date
 
 from google.adk.agents import Agent
 from google.adk.agents.context_cache_config import ContextCacheConfig
+from google.adk.agents.run_config import RunConfig
 from google.adk.apps import App
 from google.adk.code_executors import BuiltInCodeExecutor
 from google.adk.planners import BuiltInPlanner
@@ -69,10 +70,14 @@ Dashboard MCP — start here:
 - `warehouse_overview`: one catalog (today, databases, tables, columns, row
   counts). Call it once per session. After that do not call list_databases
   or list_tables unless a table is missing from the brief.
-- `preview_query`: **the default for every SELECT you write.** A result of
-  60 rows or fewer comes back whole; larger ones come back as a sample plus
-  a `glance` (first/last, min/max, example values) that you should caption
-  from. Do not also run the same SELECT on ClickHouse MCP.
+- `preview_query`: for finding out what is in the data — what a column
+  holds, whether a join lands, how wide a range runs. A result of 60 rows or
+  fewer comes back whole; larger ones come back as a sample plus a `glance`
+  (first/last, min/max, example values) you can caption from. It is not a
+  step on the way to a chart: `add_panel` runs its own query and returns the
+  same `glance`, so previewing a SELECT you are about to add buys nothing.
+  Preview to learn, add to draw. Do not also run the same SELECT on
+  ClickHouse MCP.
 - `read_panels`: replay the queries behind charts already on the canvas.
   `get_dashboard` is specs only — it has no numbers. Call `read_panels`
   when the user asks about an existing dashboard, or before you caption or
@@ -112,6 +117,37 @@ Name the database, the table, and the grain of a row when you describe
 something. Prefer concrete numbers over adjectives.
 """
 
+# Both modes. The single biggest lever on how long a turn takes, so it sits
+# on its own rather than as an aside in the build section.
+BATCHING = """\
+# Asking several things at once
+
+A tool call on its own costs a full round trip, and the thinking in front of
+it is most of the wait. So when you have questions that do not depend on
+each other, ask them in the same turn: issue all of those calls together and
+read the results as a set. They run concurrently, so four at once cost about
+what one costs.
+
+This is most of the difference between a fast answer and a slow one. Four
+columns to check across three tables is one turn of four `preview_query`
+calls, not four turns of one. Once you know the queries for a dashboard, it
+is one turn of four `add_panel` calls.
+
+So work in waves. Before you send anything, ask what you would need to know
+to answer completely, and send that whole list at once. Read the results
+together, and let what they tell you decide the next wave. Two or three
+wide waves beat fifteen narrow ones, and they reach the same place.
+
+Sequence only what genuinely needs the previous answer. You cannot write a
+query against a schema you have not read, so `warehouse_overview` goes first
+and alone; after it, most of what follows is independent — a title's ratings
+and its chart run and its country spread do not depend on each other, they
+are three questions you happen to be asking about the same title.
+
+Never re-run a query you already ran this turn. If you need the number
+again, it is in the result you are already holding.
+"""
+
 SHARED_TAIL = """\
 Google Search is for context the warehouse cannot know: what a title is,
 public reception, a news event. The warehouse is the only source of figures
@@ -136,6 +172,21 @@ If the assumption is the very thing the user asked about, the answer is
 that the data does not support it. Do not compute a proxy for the missing
 number and hand it over as though it were the number.
 
+A count counts exactly what the query filtered for, and the words around it
+have to match that filter. If you did not exclude the home market, it is not
+a count of foreign ones; if you counted rows, it is not a count of titles.
+When you have two nearby figures — with and without an exclusion, weeks and
+distinct countries — take the one your sentence claims, not the larger one.
+
+Never `sum` a column that is already a running total. A cumulative counter
+repeats its whole history on every row, so summing it adds the same week
+over and over and inflates the answer several times over — `max` gives the
+longest run and `count` gives how many rows there were, and one of those is
+the number you meant. The tell is a name like `cumulative_*`, `*_to_date` or
+`total_*` sitting on a table whose grain is one row per period. Check the
+grain before you aggregate: a measure per period sums, a state per period
+does not.
+
 The code sandbox is for a ratio or a distribution you already fetched. Do
 not re-query to add two numbers.
 """
@@ -152,10 +203,10 @@ Then, for each panel:
    so group by day or week rather than returning raw rows, and give every
    expression an explicit alias — the alias is the name you will pass as `x`
    or `y`.
-2. Call `add_panel` when you know the columns. It runs the query, checks the
-   spec, and returns `sample_rows` and `glance`. Read those before you write
-   the caption. Use `preview_query` only when you are unsure of the shape;
-   do not preview and then add the same SELECT.
+2. Call `add_panel`. It runs the query, checks the spec, and returns
+   `sample_rows` and `glance`; read those before you write the caption. Go
+   straight there — the columns come from the schema you already read, and
+   previewing first only pays for the same glance twice.
 3. If `add_panel` returns `ok: false`, the panel was not saved: read
    `problems` and `columns`, fix the mismatch, and call it again. Do not
    apologise — just correct it.
@@ -182,6 +233,13 @@ one number is a `stat`, a bar of a breakdown is a `treemap`, a bar of a
 spread is a `boxplot`, a bar of two dimensions at once is a `heatmap`. Four
 bar charts is one chart drawn four times.
 
+The exception to countries-become-maps is size. A `map` draws territory, so
+city-states and small islands have almost none to shade: the panel reports
+them as "n not on the map" rather than showing them. Check the names in your
+result before you choose. When the small territories are incidental, use the
+map; when they carry the finding, a `bar` or `treemap` that shows every row
+is the more honest chart.
+
 Do not choose a type the data has to be flattened to fit. If a result has
 a hierarchy or a flow in it, the chart that shows it is worth more than the
 one that averages it away.
@@ -202,6 +260,12 @@ comparable charts side by side want 6 each; a headline `stat` wants 3. Give
 a map, treemap, calendar, radar, graph, tree, themeRiver, chord, parallel or
 lines a height of 2 — they are unreadable at one row.
 
+Pass `width` and `height` in the `add_panel` call that creates the panel.
+You already know what the chart is and how much room it needs, so laying the
+canvas out is part of building it, not a pass you make afterwards — going
+back to resize six panels you just added costs six round trips and changes
+nothing you did not already know.
+
 Put the number that answers the question first, then the breakdowns, then
 the detail table. Four panels that each say something different beat eight
 that restate one finding. Vary the shape as well as the query: a canvas
@@ -215,6 +279,19 @@ last chart" refers to what is already there. Call `get_dashboard` for ids,
 then `read_panels` if you need the numbers, before you change or delete
 anything. When changing a chart type, pass the columns it needs in the same
 `update_panel` call — they replace the old ones as a set.
+
+An edit lands on exactly one dashboard: the one this conversation is about,
+which is the one you built or the one the user named. Dashboards you did not
+touch in this conversation belong to work someone else did, and a request to
+change "the last panel" is never a request to change theirs. If two of them
+could be the one meant, say which you are about to edit and edit that one,
+or ask — editing both to cover the ambiguity destroys a panel nobody asked
+you to remove, and you cannot put it back.
+
+For the same reason, prefer adding to the dashboard this conversation
+already built over starting a second one on the same subject. Two dashboards
+with near-identical titles are what make a later "drop the last panel"
+ambiguous in the first place.
 
 # Writing a proposal
 
@@ -296,11 +373,43 @@ def authoring_enabled() -> bool:
     )
 
 
-def analyst_instruction(_context=None) -> str:
+def _focus_clause(context) -> str:
+    """What the user currently has open, as a line the model can act on.
+
+    This is the referent for "that chart" and "the last panel". Resolving a
+    pronoun by listing dashboards and picking one does not work — with six on
+    the rail the model picks a plausible wrong one, and an edit to the wrong
+    dashboard destroys a panel nobody asked to lose. The tab is the only
+    thing that actually knows.
+    """
+    state = getattr(context, "state", None) or {}
+    kind, ident = state.get(FOCUS_KIND) or "", state.get(FOCUS_ID) or ""
+    if kind == "dashboard" and ident:
+        return (
+            f"\nThe user is looking at dashboard `{ident}`. That is what "
+            '"this", "that chart" and "the last panel" refer to, and it is '
+            "the only dashboard an edit should touch unless they name "
+            "another.\n"
+        )
+    if kind == "proposal" and ident:
+        return (
+            f"\nThe user is looking at proposal `{ident}`. That is what "
+            '"this" and "it" refer to. Edits go there unless they name '
+            "another.\n"
+        )
+    return (
+        "\nThe user has nothing open on the canvas. If they refer to "
+        "something as though it were on screen, ask which one rather than "
+        "guessing — and edit only what this conversation built.\n"
+    )
+
+
+def analyst_instruction(context=None) -> str:
     """Fresh date each turn so search and 'this year' land in the right year.
 
     Assembled rather than templated: an agent without the authoring toolsets
-    must not be handed the sections that describe them.
+    must not be handed the sections that describe them. Re-read every turn,
+    which is also what lets the focus line below track the open tab.
     """
     authoring = authoring_enabled()
     head = READING.replace(
@@ -309,8 +418,17 @@ def analyst_instruction(_context=None) -> str:
         if authoring
         else "",
     )
-    parts = [head, AUTHORING_TOOLS if authoring else READING_TOOLS, SHARED_TAIL]
+    parts = [
+        head,
+        AUTHORING_TOOLS if authoring else READING_TOOLS,
+        BATCHING,
+        SHARED_TAIL,
+    ]
     parts.append(AUTHORING if authoring else READING_TAIL)
+    # Last, and only when it can author: it is an instruction about what to
+    # edit, and it should be the most recent thing the model read.
+    if authoring:
+        parts.append(_focus_clause(context))
     return "\n".join(parts).replace("{today}", date.today().isoformat())
 
 
@@ -342,9 +460,18 @@ def build_agent(toolsets: dict[str, McpToolset] | None = None) -> Agent:
             "dashboards and filmmaker theme proposals on the canvas."
         ),
         instruction=analyst_instruction,
+        # MEDIUM, not HIGH. A turn here is thirty to fifty model calls, and
+        # the thinking in front of each one is ~94% of the wall clock — so
+        # the level is not a quality knob applied once, it is a multiplier on
+        # every step. HIGH buys deliberation the individual steps do not
+        # need: most of them are "write a GROUP BY against a schema I have
+        # already read". The deliberation that matters is which question the
+        # warehouse can answer, and that survives at MEDIUM, which is also
+        # this model's own default. `include_thoughts` is not optional — the
+        # chat streams these as the progress the user reads while waiting.
         planner=BuiltInPlanner(
             thinking_config=types.ThinkingConfig(
-                thinking_level=types.ThinkingLevel.HIGH,
+                thinking_level=types.ThinkingLevel.MEDIUM,
                 include_thoughts=True,
             )
         ),
@@ -355,6 +482,31 @@ def build_agent(toolsets: dict[str, McpToolset] | None = None) -> Agent:
 
 
 APP_NAME = "streamlens"
+
+# Session-state keys for the tab the user has open. The API writes them every
+# turn; `analyst_instruction` reads them. Named here because both sides have
+# to agree and neither owns the other.
+FOCUS_KIND = "focus_kind"
+FOCUS_ID = "focus_id"
+
+# A ceiling on model calls per turn. Gemini 3 loops until it is satisfied and
+# will not stop itself, so the harness has to: without this, one confused
+# turn spends the user's afternoon. Honest work on a warehouse question
+# measures around fifty calls, and batching independent ones pulls that down,
+# so this is roughly double the observed cost of the hardest question we
+# have — high enough never to truncate real work, low enough to be a bound.
+# ADK's own default is 500, which is not a bound.
+MAX_LLM_CALLS = 120
+
+
+def run_config() -> RunConfig:
+    """The per-turn limits, shared by the API and the terminal runners.
+
+    Here rather than at each call site so the browser and `probe_chat.py`
+    cannot drift apart on the one setting that decides whether a runaway
+    turn ends.
+    """
+    return RunConfig(max_llm_calls=MAX_LLM_CALLS)
 
 
 def build_app(toolsets: dict[str, McpToolset] | None = None) -> App:

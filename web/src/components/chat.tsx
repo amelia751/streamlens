@@ -8,7 +8,7 @@
  * what you read here and what you see there cannot disagree.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -48,7 +48,22 @@ async function* sseEvents(body: ReadableStream<Uint8Array>) {
 }
 
 export function Chat() {
-  const { touchDashboard, touchProposal } = useWorkspace();
+  const { touchDashboard, touchProposal, tabs, activeId } = useWorkspace();
+
+  // The tab the user is looking at, sent with every turn. Without it the
+  // analyst has to guess what "that chart" means, and with several
+  // dashboards on the rail it guesses wrong — and an edit to the wrong
+  // dashboard removes a panel nobody asked to lose.
+  const focus = useMemo(() => {
+    const tab = tabs.find((t) => t.id === activeId);
+    if (tab?.kind === "dashboard") {
+      return { focus_kind: "dashboard", focus_id: tab.dashboardId };
+    }
+    if (tab?.kind === "proposal") {
+      return { focus_kind: "proposal", focus_id: tab.proposalId };
+    }
+    return { focus_kind: "", focus_id: "" };
+  }, [tabs, activeId]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [activity, setActivity] = useState<string>();
@@ -84,7 +99,11 @@ export function Chat() {
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ message: text, session_id: session.current }),
+          body: JSON.stringify({
+            message: text,
+            session_id: session.current,
+            ...focus,
+          }),
         });
         if (!res.ok || !res.body) throw new Error(await res.text());
 
@@ -123,7 +142,7 @@ export function Chat() {
         setBusy(false);
       }
     },
-    [busy, touchDashboard, touchProposal],
+    [busy, touchDashboard, touchProposal, focus],
   );
 
   if (!open) {

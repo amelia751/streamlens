@@ -96,19 +96,24 @@ PREVIEW_WHOLE_ROWS = 60
 
 
 def preview_query(query: str) -> dict[str, Any]:
-    """Run a SELECT and see what it returns, without saving anything.
+    """Explore the data with a SELECT, without saving anything.
 
-    This is the tool to reach for whenever you write a SELECT. A result of
-    {whole} rows or fewer comes back in full under `rows`; anything larger
-    comes back as `sample_rows` plus a `glance` — first and last row, min
-    and max on every number, example values on everything else — which is
-    what you should caption from.
+    For finding out what is there: what a column contains, whether a join
+    lands, how wide a range runs. A result of {whole} rows or fewer comes
+    back in full under `rows`; anything larger comes back as `sample_rows`
+    plus a `glance` — first and last row, min and max on every number,
+    example values on everything else.
+
+    Not a step on the way to a chart. `add_panel` runs its own query and
+    returns the same `glance`, so previewing a SELECT you are about to add
+    costs a round trip and tells you nothing new. Preview to learn; add to
+    draw.
+
+    Independent previews should go out together in one turn rather than one
+    per turn — see the guidance on batching.
 
     Use ClickHouse `run_query` only for what this refuses: something that is
     not a single SELECT, or a result so large you genuinely need to page it.
-
-    Do not preview and then add the same SELECT — `add_panel` returns the
-    same glance.
 
     Args:
         query: a single SELECT (or WITH ... SELECT) statement.

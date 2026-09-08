@@ -32,7 +32,7 @@ import time
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 
-from streamlens.agents.analyst import authoring_enabled, build_app
+from streamlens.agents.analyst import authoring_enabled, build_app, run_config
 
 DEFAULT_PROMPT = "What could you build me from this warehouse?"
 
@@ -94,7 +94,10 @@ async def main(prompts: list[str]) -> None:
         message = types.Content(role="user", parts=[types.Part(text=prompt)])
 
         async for event in runner.run_async(
-            user_id="local", session_id=session.id, new_message=message
+            user_id="local",
+            session_id=session.id,
+            new_message=message,
+            run_config=run_config(),
         ):
             for part in (event.content.parts if event.content else []) or []:
                 if part.function_call:

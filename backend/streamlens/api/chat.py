@@ -13,6 +13,7 @@ import json
 import logging
 from typing import AsyncIterator
 
+from google.adk.agents.invocation_context import LlmCallsLimitExceededError
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
@@ -21,7 +22,12 @@ log = logging.getLogger(__name__)
 
 # Sessions are keyed by app name, and the Runner takes the name from the
 # App, so these have to be the same string. Imported rather than repeated.
-from streamlens.agents.analyst.agent import APP_NAME  # noqa: E402
+from streamlens.agents.analyst.agent import (  # noqa: E402
+    APP_NAME,
+    FOCUS_ID,
+    FOCUS_KIND,
+    MAX_LLM_CALLS,
+)
 
 # Tools that change what is on the canvas. Anything here triggers a refetch.
 MUTATING = {
@@ -139,14 +145,24 @@ def _touched(key: str, args: dict, response: object) -> str | None:
 
 
 async def stream_turn(
-    message: str, session_id: str, user: str = "local"
+    message: str,
+    session_id: str,
+    user: str = "local",
+    focus_kind: str = "",
+    focus_id: str = "",
 ) -> AsyncIterator[str]:
     """One turn, on MCP connections opened and closed for this turn alone.
 
     Reconnecting costs a second or two against a turn that runs for a minute,
     which is a good trade for never serving a stale session.
+
+    `focus_kind` and `focus_id` are the tab the user has open. They go into
+    session state rather than into the message, so the agent reads them as a
+    standing fact about the canvas instead of as something the user just
+    said — and so a turn that changes tabs corrects the referent instead of
+    stacking a second one.
     """
-    from streamlens.agents.analyst import build_app, build_toolsets
+    from streamlens.agents.analyst import build_app, build_toolsets, run_config
 
     toolsets = build_toolsets()
     # The App rather than the bare agent, so the browser gets the same
@@ -179,7 +195,16 @@ async def stream_turn(
             )
         else:
             async for event in runner.run_async(
-                user_id=user, session_id=session_id, new_message=content
+                user_id=user,
+                session_id=session_id,
+                new_message=content,
+                # Overwritten every turn, including with "" when nothing is
+                # open, so the referent never outlives the tab.
+                state_delta={
+                    FOCUS_KIND: focus_kind or "",
+                    FOCUS_ID: focus_id or "",
+                },
+                run_config=run_config(),
             ):
                 for part in (event.content.parts if event.content else []) or []:
                     if part.function_call:
@@ -219,6 +244,22 @@ async def stream_turn(
 
                     elif part.text and event.author != "user":
                         yield _sse({"type": "text", "text": part.text})
+
+    except LlmCallsLimitExceededError:
+        # The turn hit the ceiling rather than finishing. Whatever it had
+        # already written to the canvas is saved and real, so say that: the
+        # failure is the missing summary, not the work.
+        log.warning("chat turn hit the %s-call ceiling", MAX_LLM_CALLS)
+        yield _sse(
+            {
+                "type": "error",
+                "message": (
+                    "I took too many steps on that and stopped. Anything I "
+                    "already put on the canvas is saved — ask me to pick up "
+                    "from there, or narrow the question."
+                ),
+            }
+        )
 
     except Exception as exc:
         log.exception("chat turn failed")

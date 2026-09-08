@@ -338,6 +338,12 @@ class ChatBody(BaseModel):
     message: str
     session_id: str
 
+    # What the user is looking at, so "make that one weekly" has a referent.
+    # The browser sends the open tab; without it the agent has to guess which
+    # of several dashboards a pronoun meant, and it guesses wrong.
+    focus_kind: str = ""
+    focus_id: str = ""
+
 
 @app.post("/api/chat")
 async def chat(body: ChatBody) -> StreamingResponse:
@@ -348,7 +354,12 @@ async def chat(body: ChatBody) -> StreamingResponse:
         raise HTTPException(400, "message is required")
 
     return StreamingResponse(
-        stream_turn(body.message, body.session_id),
+        stream_turn(
+            body.message,
+            body.session_id,
+            focus_kind=body.focus_kind,
+            focus_id=body.focus_id,
+        ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
