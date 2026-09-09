@@ -28,6 +28,9 @@ data/**/_tmp*/
 .env
 .env.*
 
+# Local notes
+todo.md
+
 # Hackathon writeup (local only)
 submission/
 
