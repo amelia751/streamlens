@@ -412,7 +412,7 @@ function ProposalList({
   onRestore: (proposal: ProposalSummary) => void;
 }) {
   if (proposals.length === 0) {
-    return <p className="rail-empty">Ask the analyst for a theme.</p>;
+    return <p className="rail-empty">No proposals yet.</p>;
   }
 
   return (
@@ -439,7 +439,7 @@ function DashboardList({
   onRestore: (dashboard: DashboardSummary) => void;
 }) {
   if (dashboards.length === 0) {
-    return <p className="rail-empty">Ask the analyst to build one.</p>;
+    return <p className="rail-empty">No dashboards yet.</p>;
   }
 
   return (

@@ -19,6 +19,18 @@ invisible in either dataset alone.
 
 ---
 
+## Live
+
+Cloud Run service URLs. They belong to the service, not a revision, so a
+redeploy — including the GitHub Action on `main` — does not change them.
+
+| | URL |
+|---|---|
+| **App** | https://streamlens-web-148137280149.us-central1.run.app |
+| **API** | https://streamlens-api-148137280149.us-central1.run.app |
+
+---
+
 ## Where the platforms are used
 
 Two files, one per platform. Each registers every service the product uses,
