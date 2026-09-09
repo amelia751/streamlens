@@ -25,18 +25,16 @@ export const GOOD = "#1a7f37";
  */
 export const ROOMS: Record<
   string,
-  { tone: Tone; kicker: string; title: string; lede: string }
+  { tone: Tone; title: string; lede: string }
 > = {
   data: {
     tone: "yellow",
-    kicker: "Warehouse",
     title: "Data",
-    lede: "Title performance and YouTube campaigns — the two cuts of the public warehouse.",
+    lede: "By title performance and YouTube campaigns.",
   },
   studio: {
     tone: "purple",
-    kicker: "Warehouse + analyst",
     title: "Studio",
-    lede: "The warehouse, and what you build from it.",
+    lede: "Build dashboards and theme proposals.",
   },
 };

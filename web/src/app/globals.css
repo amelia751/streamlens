@@ -231,38 +231,105 @@ a {
   line-height: 1.4;
 }
 
+/* The landing page: the two ways in, dealt as cards. */
+
+/* Two cards on an otherwise empty page, so they sit in the middle of it.
+   The shell's own vertical padding is inside this box, so it comes off the
+   height along with the nav to land on the true centre. */
+.deal-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100dvh - var(--nav-height) - 3.35rem);
+}
+
+.deal {
+  display: grid;
+  gap: 1rem;
+  align-items: stretch;
+  width: 100%;
+  max-width: 44rem;
+}
+
+@media (min-width: 46rem) {
+  .deal {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.deal-slot {
+  display: flex;
+}
+
 .dest-card {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  padding: 1.05rem 1.1rem 1.15rem;
-  border-radius: 10px;
+  flex: 1;
+  border-radius: 12px;
+  overflow: hidden;
   background: var(--paper);
   border: 1px solid var(--line);
-  text-decoration: none;
-  color: inherit;
 }
 
-.dest-card:hover {
-  background: var(--wash);
+/* The tone is the card's face, so it carries the mark and the title rather
+   than sitting in a swatch the eye has to hunt for. */
+.dest-card-top {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  height: 11rem;
+  padding: 1.5rem 1.25rem 1.25rem;
+  background: var(--tone, var(--gray));
+  color: var(--ink);
 }
 
-.dest-card .swatch {
-  margin-bottom: 0.75rem;
-}
-
-.dest-card h2 {
+.dest-card-top h2 {
   margin: 0;
-  font-size: 1rem;
+  font-family: var(--font-display), Fraunces, "Iowan Old Style", Georgia, serif;
+  font-size: 1.7rem;
   font-weight: 600;
   letter-spacing: -0.02em;
+  line-height: 1.1;
+  text-align: center;
 }
 
-.dest-card p {
-  margin: 0.4rem 0 0;
+.deal-mark {
+  width: 2.1rem;
+  height: 2.1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.dest-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: 1.15rem 1.2rem 1.2rem;
+  text-align: center;
+}
+
+.dest-card-body p {
+  margin: 0;
   color: var(--muted);
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   line-height: 1.5;
+}
+
+.card-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding-top: 1.15rem;
+}
+
+.card-actions .pill {
+  flex: 1;
+  padding: 0 0.7rem;
 }
 
 .control-bar {

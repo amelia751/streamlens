@@ -1,93 +1,75 @@
 import Link from "next/link";
-import { Shell, ErrorNote } from "@/components/shell";
-import { Stat, Stats } from "@/components/charts";
-import { Reveal } from "@/components/motion";
-import { runQuery, compact, commas } from "@/lib/api";
-import type { Tone } from "@/lib/theme";
 
-export const dynamic = "force-dynamic";
+import { Stagger, StaggerItem } from "@/components/motion";
+import { ROOMS } from "@/lib/theme";
 
-const ROOMS: {
-  href: string;
-  name: string;
-  blurb: string;
-  tone: Tone;
-}[] = [
+function DataMark() {
+  return (
+    <svg className="deal-mark" viewBox="0 0 48 48" aria-hidden>
+      <ellipse cx="24" cy="12" rx="14" ry="5.5" />
+      <path d="M10 12v24c0 3 6.3 5.5 14 5.5s14-2.5 14-5.5V12" />
+      <path d="M10 24c0 3 6.3 5.5 14 5.5s14-2.5 14-5.5" />
+    </svg>
+  );
+}
+
+function StudioMark() {
+  return (
+    <svg className="deal-mark" viewBox="0 0 48 48" aria-hidden>
+      <rect x="7" y="9" width="34" height="30" rx="4" />
+      <path d="M7 18h34" />
+      <path d="M14 33l6.5-8 5 4L34 18" />
+    </svg>
+  );
+}
+
+/**
+ * The two ways in, dealt as cards.
+ *
+ * Title, tone and lede come from the same masthead the destination itself
+ * uses, so a card here cannot describe a page differently than the page does.
+ */
+const DESTINATIONS = [
   {
-    href: "/data?view=titles",
-    name: "By Title Performance",
-    blurb:
-      "YouTube promo against Weekly Top 10 results, and where each title landed country by country.",
-    tone: "yellow",
+    ...ROOMS.data,
+    Mark: DataMark,
+    actions: [
+      { href: "/data?view=titles", label: "Title performance" },
+      { href: "/data?view=promo", label: "Campaigns" },
+    ],
   },
   {
-    href: "/data?view=promo",
-    name: "By Youtube Campaigns",
-    blurb: "What the 44 Netflix YouTube channels publish, where, and in what format.",
-    tone: "green",
-  },
-  {
-    href: "/studio",
-    name: "Studio",
-    blurb:
-      "The warehouse, and what you build from it.",
-    tone: "purple",
+    ...ROOMS.studio,
+    Mark: StudioMark,
+    actions: [{ href: "/studio", label: "Open the canvas" }],
   },
 ];
 
-export default async function Home() {
-  let o: Record<string, unknown> = {};
-  try {
-    o = (await runQuery("overview")).rows[0] ?? {};
-  } catch (error) {
-    return (
-      <Shell title="Overview" kicker="Streamlens">
-        <ErrorNote error={error} />
-      </Shell>
-    );
-  }
-
+export default function Home() {
   return (
-    <Shell
-      title="What a studio promotes, against what actually performs"
-      kicker="Overview"
-      lede="Two cuts of the public warehouse on one desk, and a studio that builds more."
-    >
-      <Stats>
-        <Stat
-          label="YouTube channels"
-          value={commas(o.channels)}
-          hint="Netflix-operated, verified"
-        />
-        <Stat
-          label="Videos"
-          value={compact(o.videos)}
-          hint={`${compact(o.snapshots)} snapshots`}
-        />
-        <Stat
-          label="Top 10 titles"
-          value={commas(o.top10_titles)}
-          hint={`${commas(o.countries)} countries`}
-        />
-        <Stat
-          label="Linked titles"
-          value={commas(o.linked_titles)}
-          hint="promo ↔ chart"
-        />
-      </Stats>
-
-      <p className="kicker">Rooms</p>
-      <Reveal delay={0.1}>
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {ROOMS.map((d) => (
-            <Link key={d.href} href={d.href} className="dest-card">
-              <i className={`swatch tone-${d.tone}`} aria-hidden />
-              <h2>{d.name}</h2>
-              <p>{d.blurb}</p>
-            </Link>
-          ))}
-        </div>
-      </Reveal>
-    </Shell>
+    <div className="shell deal-page">
+      <Stagger className="deal">
+        {DESTINATIONS.map(({ Mark, ...d }) => (
+          <StaggerItem key={d.title} className={`deal-slot tone-${d.tone}`}>
+            <article className="dest-card">
+              <div className="dest-card-top">
+                <Mark />
+                <h2>{d.title}</h2>
+              </div>
+              <div className="dest-card-body">
+                <p>{d.lede}</p>
+                <div className="card-actions">
+                  {d.actions.map((a) => (
+                    <Link key={a.href} className="pill" href={a.href}>
+                      {a.label}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </article>
+          </StaggerItem>
+        ))}
+      </Stagger>
+    </div>
   );
 }
