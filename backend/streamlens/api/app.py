@@ -21,8 +21,11 @@ same way, on the proposal's own copy of the query rather than a dashboard's.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
+import threading
+import time
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -51,6 +54,27 @@ _mcp_app = dashboard_mcp.streamable_http_app()
 _proposal_mcp_app = proposal_mcp.streamable_http_app()
 
 
+# ClickHouse Cloud suspends the service after fifteen idle minutes, and
+# waking the replicas takes tens of seconds — a wait the entire UI sits in,
+# since the source rail and every panel are behind it. One trivial query
+# well inside that window keeps the idle timer from ever reaching the end of
+# it. Tied to this process rather than to the service's own setting, so an
+# API that is not running lets the service sleep and cost nothing.
+KEEPALIVE_SECONDS = float(os.getenv("STREAMLENS_KEEPALIVE_SECONDS", "540"))
+
+
+async def _keep_warm() -> None:
+    while True:
+        await asyncio.sleep(KEEPALIVE_SECONDS)
+        try:
+            await asyncio.to_thread(shared_client().command, "SELECT 1")
+        except Exception:
+            # Not worth a traceback: the next visitor's own query reports a
+            # warehouse that is genuinely down, and a missed ping only costs
+            # the cold start this is here to avoid.
+            log.warning("keepalive ping failed")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     from streamlens.dashboards.store import ensure_schema
@@ -64,9 +88,16 @@ async def lifespan(_: FastAPI):
         # from serving; the dashboard routes will report it themselves.
         log.exception("could not ensure the dashboard and proposal schemas")
 
-    async with _mcp_app.router.lifespan_context(_mcp_app):
-        async with _proposal_mcp_app.router.lifespan_context(_proposal_mcp_app):
-            yield
+    warm = asyncio.create_task(_keep_warm()) if KEEPALIVE_SECONDS > 0 else None
+    try:
+        async with _mcp_app.router.lifespan_context(_mcp_app):
+            async with _proposal_mcp_app.router.lifespan_context(
+                _proposal_mcp_app
+            ):
+                yield
+    finally:
+        if warm is not None:
+            warm.cancel()
 
 
 app = FastAPI(
@@ -106,22 +137,24 @@ def health() -> dict[str, Any]:
         raise HTTPException(503, f"clickhouse unreachable: {exc}") from exc
 
 
-@app.get("/api/warehouse")
-def warehouse() -> dict[str, Any]:
-    """The instance as it stands: ingestion sources, databases, tables.
+# The shape of the warehouse changes when a pipe is added or a table fills,
+# which is minutes-to-days apart, but the rail that draws it is on every
+# Studio navigation. Half a second of catalog walking and one Cloud
+# control-plane call per navigation buys nothing, so the answer is held
+# briefly and an expired copy is served while the replacement is fetched:
+# a rail one minute out of date is not wrong in any way a reader would notice,
+# and a rail that is not there yet is.
+_WAREHOUSE_FRESH = 60.0
+_warehouse_lock = threading.Lock()
+_warehouse_cached: tuple[dict[str, Any], float] | None = None
+_warehouse_refreshing = False
 
-    Read live on every call. The UI that draws the source rail owns no list
-    of its own, so a new pipe shows up without a deploy.
-    """
+
+def _read_warehouse() -> dict[str, Any]:
     from streamlens.config import clickhouse_cloud_settings
 
-    try:
-        version, databases = read_catalog()
-        sources = read_sources(databases)
-    except Exception as exc:
-        log.exception("warehouse read failed")
-        raise HTTPException(502, f"warehouse unreachable: {exc}") from exc
-
+    version, databases = read_catalog()
+    sources = read_sources(databases)
     return {
         "service": {
             "name": clickhouse_cloud_settings().service_name,
@@ -130,6 +163,55 @@ def warehouse() -> dict[str, Any]:
         "sources": sources,
         "databases": database_payload(databases),
     }
+
+
+def _refresh_warehouse() -> None:
+    global _warehouse_cached, _warehouse_refreshing
+    try:
+        fresh = _read_warehouse()
+    except Exception:
+        # The stale copy stays up and the next caller tries again. Nothing to
+        # report to anyone: the reader already has an answer on screen.
+        log.warning("background warehouse refresh failed", exc_info=True)
+    else:
+        with _warehouse_lock:
+            _warehouse_cached = (fresh, time.monotonic())
+    finally:
+        with _warehouse_lock:
+            _warehouse_refreshing = False
+
+
+@app.get("/api/warehouse")
+def warehouse() -> dict[str, Any]:
+    """The instance as it stands: ingestion sources, databases, tables.
+
+    The UI that draws the source rail owns no list of its own, so a new pipe
+    shows up without a deploy — within a minute of appearing, which is the
+    window this is cached for.
+    """
+    global _warehouse_cached, _warehouse_refreshing
+
+    with _warehouse_lock:
+        cached = _warehouse_cached
+        if cached and time.monotonic() - cached[1] < _WAREHOUSE_FRESH:
+            return cached[0]
+        # Expired, but usable. One caller starts the replacement and everyone
+        # gets the old copy now rather than a queue of identical reads.
+        if cached and not _warehouse_refreshing:
+            _warehouse_refreshing = True
+            threading.Thread(target=_refresh_warehouse, daemon=True).start()
+        if cached:
+            return cached[0]
+
+    try:
+        payload = _read_warehouse()
+    except Exception as exc:
+        log.exception("warehouse read failed")
+        raise HTTPException(502, f"warehouse unreachable: {exc}") from exc
+
+    with _warehouse_lock:
+        _warehouse_cached = (payload, time.monotonic())
+    return payload
 
 
 @app.get("/api/table/{database}/{table}")

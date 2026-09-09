@@ -22,6 +22,8 @@ import remarkGfm from "remark-gfm";
 
 import { readPasted, refLink, type Ref } from "@/lib/links";
 import { RowMenu } from "@/components/row-menu";
+import { SqlBlock, type Ran } from "@/components/sql";
+import { Thought } from "@/components/thought";
 import { Tip } from "@/components/tip";
 import { useWorkspace } from "@/components/workspace";
 
@@ -36,10 +38,14 @@ import { useWorkspace } from "@/components/workspace";
 type Attachment = { path: string; label: string; whole: boolean };
 
 type Message = {
-  role: "user" | "agent" | "thought";
+  role: "user" | "agent" | "thought" | "sql";
   text: string;
   /** What was attached when it was sent, so the turn keeps its receipt. */
   attached?: Attachment[];
+  /** On a `sql` row: the call it came from, and what it answered with. */
+  ran?: Ran;
+  /** The call id, so the outcome can find the statement it belongs to. */
+  token?: string;
 };
 
 type Conversation = {
@@ -152,6 +158,17 @@ async function nameOf(ref: Ref): Promise<string> {
   } catch {
     return "";
   }
+}
+
+/**
+ * The activity line, sentence-cased.
+ *
+ * The labels are written lowercase because they are fragments of a sentence
+ * about the agent; on their own line they are the sentence. Only the first
+ * letter, so `Reading table schemas` does not become title case.
+ */
+function capitalize(label: string): string {
+  return label ? label[0].toUpperCase() + label.slice(1) : label;
 }
 
 /** Same rule the backend names a thread by, so a reload reads the same. */
@@ -294,8 +311,20 @@ export function Chat() {
   }, []);
 
   const log = useRef<HTMLDivElement>(null);
+  // Follow the newest line only while the reader is already at the bottom.
+  // A turn writes constantly — thoughts, SQL, activity — and pinning on
+  // every write made the log impossible to scroll back through.
+  const pinned = useRef(true);
+
   useEffect(() => {
-    log.current?.scrollTo({ top: log.current.scrollHeight });
+    pinned.current = true;
+  }, [currentId]);
+
+  useEffect(() => {
+    if (!pinned.current) return;
+    const node = log.current;
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
   }, [current?.messages, current?.activity]);
 
   const patch = useCallback(
@@ -503,6 +532,7 @@ export function Chat() {
         activity: "thinking",
       }));
 
+      pinned.current = true;
       turnStarted();
       try {
         const res = await fetch("/api/chat", {
@@ -535,8 +565,47 @@ export function Chat() {
                       { role: "thought" as const, text: last.text + event.text },
                     ]
                   : [...c.messages, { role: "thought" as const, text: event.text }];
-              return { ...c, activity: "thinking", messages };
+              // The activity line is not touched. A thought between two tool
+              // calls would otherwise downgrade "reading the warehouse" to
+              // "thinking" — vaguer, and already said by the thought block
+              // pulsing right above it.
+              return { ...c, messages };
             });
+          } else if (event.type === "sql") {
+            // In the log rather than in the activity line: the statement is
+            // evidence for the sentence that follows it, and evidence has to
+            // still be there after the turn ends.
+            patch(id, (c) => ({
+              ...c,
+              messages: [
+                ...c.messages,
+                {
+                  role: "sql" as const,
+                  text: event.query,
+                  token: event.token,
+                  ran: { label: event.label },
+                },
+              ],
+            }));
+          } else if (event.type === "ran") {
+            patch(id, (c) => ({
+              ...c,
+              messages: c.messages.map((m) =>
+                m.role === "sql" && m.token === event.token
+                  ? {
+                      ...m,
+                      ran: {
+                        ...(m.ran ?? { label: "" }),
+                        rows: event.rows ?? undefined,
+                        problem: event.problem || undefined,
+                        columns: event.columns ?? undefined,
+                        sample: event.sample ?? undefined,
+                        done: true,
+                      },
+                    }
+                  : m,
+              ),
+            }));
           } else if (event.type === "canvas") {
             touchDashboard(event.dashboard_id);
           } else if (event.type === "proposal") {
@@ -854,7 +923,16 @@ export function Chat() {
         </div>
       )}
 
-      <div className="chat-log" ref={log}>
+      <div
+        className="chat-log"
+        ref={log}
+        onScroll={() => {
+          const node = log.current;
+          if (!node) return;
+          pinned.current =
+            node.scrollHeight - node.scrollTop - node.clientHeight < 48;
+        }}
+      >
         {current.messages.length === 0 && (
           <div className="chat-intro">
             <ul className="chat-prompts">
@@ -877,10 +955,19 @@ export function Chat() {
               )}
               <p className="chat-msg is-user">{message.text}</p>
             </div>
+          ) : message.role === "sql" ? (
+            <SqlBlock
+              key={`${current.id}-sql-${i}`}
+              query={message.text}
+              ran={message.ran ?? { label: "" }}
+            />
           ) : message.role === "thought" ? (
-            <p key={i} className="chat-msg is-thought">
-              {message.text}
-            </p>
+            <Thought
+              key={i}
+              text={message.text}
+              live={current.busy && i === current.messages.length - 1}
+              markdown={markdown}
+            />
           ) : (
             <div key={`${current.id}-${i}`} className="chat-msg is-agent">
               <Markdown remarkPlugins={[remarkGfm]} components={markdown}>
@@ -893,18 +980,10 @@ export function Chat() {
         {current.activity && (
           <p className="chat-activity">
             <span className="chat-pulse" />
-            {current.activity}…
+            {capitalize(current.activity)}…
           </p>
         )}
       </div>
-
-      {current.attached.length > 0 && (
-        <Attached
-          items={current.attached}
-          onOpen={follow}
-          onDrop={(path) => detach(current.id, path)}
-        />
-      )}
 
       <form
         className="chat-form"
@@ -913,39 +992,52 @@ export function Chat() {
           send(current.draft, current.id);
         }}
       >
-        <textarea
-          className="chat-input"
-          value={current.draft}
-          rows={2}
-          placeholder={current.busy ? "Working…" : "Ask for a dashboard"}
-          onChange={(e) =>
-            patch(current.id, (c) => ({ ...c, draft: e.target.value }))
-          }
-          onPaste={(e) => {
-            const { refs, rest } = readPasted(
-              e.clipboardData.getData("text/plain"),
-            );
-            if (refs.length === 0) return;
-
-            // The link is lifted out of the text and the rest is typed in as
-            // usual, at the cursor, because a paste is often mid-sentence.
-            e.preventDefault();
-            const box = e.currentTarget;
-            const from = box.selectionStart ?? box.value.length;
-            const to = box.selectionEnd ?? from;
-            patch(current.id, (c) => ({
-              ...c,
-              draft: c.draft.slice(0, from) + rest + c.draft.slice(to),
-            }));
-            void attach(current.id, refs);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              send(current.draft, current.id);
+        {/* One box: the charts riding along sit inside it, above what is
+            being typed, the way a highlighted phrase sits in the sentence
+            it belongs to rather than on a shelf above it. */}
+        <div className="chat-box">
+          {current.attached.length > 0 && (
+            <Attached
+              items={current.attached}
+              onOpen={follow}
+              onDrop={(path) => detach(current.id, path)}
+            />
+          )}
+          <textarea
+            className="chat-input"
+            value={current.draft}
+            rows={2}
+            placeholder={current.busy ? "Working…" : "Ask for a dashboard"}
+            onChange={(e) =>
+              patch(current.id, (c) => ({ ...c, draft: e.target.value }))
             }
-          }}
-        />
+            onPaste={(e) => {
+              const { refs, rest } = readPasted(
+                e.clipboardData.getData("text/plain"),
+              );
+              if (refs.length === 0) return;
+
+              // The link is lifted out of the text and the rest is typed in as
+              // usual, at the cursor, because a paste is often mid-sentence.
+              e.preventDefault();
+              const box = e.currentTarget;
+              const from = box.selectionStart ?? box.value.length;
+              const to = box.selectionEnd ?? from;
+              patch(current.id, (c) => ({
+                ...c,
+                draft: c.draft.slice(0, from) + rest + c.draft.slice(to),
+              }));
+              void attach(current.id, refs);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send(current.draft, current.id);
+              }
+            }}
+          />
+        </div>
+
         <button
           type="submit"
           className="chat-send"

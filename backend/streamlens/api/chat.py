@@ -114,6 +114,136 @@ ACTIVITY = {
     "generate_still": "generating the still",
 }
 
+# Calls whose SQL is the interesting part of the call. The analyst writes
+# every figure it quotes as a SELECT, and a chat that hides them asks to be
+# taken on trust — so the statement goes into the transcript beside the
+# sentence it produced, and can be read, copied and run elsewhere.
+#
+# `run_query` and `run_select_query` are ClickHouse's own MCP tools; the rest
+# are ours. `adopt_panel` is deliberately absent: it copies a chart that
+# already exists rather than writing a query of its own.
+QUERIES = {
+    "preview_query",
+    "run_query",
+    "run_select_query",
+    "add_panel",
+    "update_panel",
+    "add_proposal_panel",
+}
+
+
+# A handful of rows is enough to see the shape of the answer; more than that
+# is a table the chat is not trying to be.
+_SAMPLE = 12
+
+
+def _places(response: object) -> list[dict]:
+    """The tool's own dict, wherever MCP left it.
+
+    A function response is sometimes the payload, sometimes `{result: …}`
+    one or two layers down, sometimes a JSON string inside a text part.
+    Every one of those is a place the columns might be.
+    """
+    if not isinstance(response, dict):
+        return []
+
+    found: list[dict] = []
+    waiting: list[object] = [response]
+    while waiting:
+        place = waiting.pop()
+        if isinstance(place, str) and place.lstrip().startswith("{"):
+            try:
+                place = json.loads(place)
+            except json.JSONDecodeError:
+                continue
+        if not isinstance(place, dict) or place in found:
+            continue
+        found.append(place)
+        waiting.extend(place.get(key) for key in ("structuredContent", "result"))
+        content = place.get("content")
+        if isinstance(content, list):
+            waiting.extend(
+                item.get("text")
+                for item in content
+                if isinstance(item, dict) and item.get("type") == "text"
+            )
+    return found
+
+
+def _cell(value: object) -> object:
+    if value is None or isinstance(value, (int, float, bool)):
+        return value
+    text = value if isinstance(value, str) else str(value)
+    return text if len(text) <= 160 else f"{text[:159]}…"
+
+
+def sql_rows(response: object) -> int | None:
+    """How many rows a query answered with, if it says."""
+    for place in _places(response):
+        count = place.get("row_count")
+        if isinstance(count, int):
+            return count
+    return None
+
+
+def sql_problem(response: object) -> str:
+    """What a tool refused with, as one line, or "" when it did not."""
+    for place in _places(response):
+        if place.get("ok") is not False:
+            continue
+        problems = place.get("problems")
+        if isinstance(problems, list) and problems:
+            return str(problems[0])
+        return "the query was refused"
+    return ""
+
+
+def sql_sample(response: object) -> tuple[list[str], list[list]]:
+    """The columns and a few of the rows, for the transcript.
+
+    This is the answer the statement produced, not a restatement of the
+    statement. A chat that expands to show the SQL again has not shown
+    anything the folded line did not already say.
+    """
+    for place in _places(response):
+        raw = place.get("rows")
+        if not isinstance(raw, list) or not raw:
+            raw = place.get("sample_rows")
+        if not isinstance(raw, list) or not raw:
+            raw = place.get("data")
+        if not isinstance(raw, list) or not raw:
+            continue
+
+        cols = place.get("columns")
+        columns = (
+            [str(c) for c in cols]
+            if isinstance(cols, list) and cols
+            else []
+        )
+        first = raw[0]
+        if isinstance(first, dict):
+            if not columns:
+                columns = [str(k) for k in first.keys()]
+            sample = [
+                [_cell(row.get(c)) for c in columns]
+                for row in raw[:_SAMPLE]
+                if isinstance(row, dict)
+            ]
+        elif isinstance(first, (list, tuple)):
+            if not columns:
+                columns = [f"c{i + 1}" for i in range(len(first))]
+            sample = [
+                [_cell(v) for v in row[: len(columns)]]
+                for row in raw[:_SAMPLE]
+                if isinstance(row, (list, tuple))
+            ]
+        else:
+            continue
+        if sample:
+            return columns, sample
+    return [], []
+
+
 def human_error(exc: BaseException) -> str:
     """A sentence for the transcript, rather than whatever the exception says.
 
@@ -497,6 +627,20 @@ async def stream_turn(
                                 "label": ACTIVITY.get(call.name, "working"),
                             }
                         )
+                        if call.name in QUERIES:
+                            statement = str(args.get("query") or "").strip()
+                            if statement:
+                                yield _sse(
+                                    {
+                                        "type": "sql",
+                                        "token": token,
+                                        "label": ACTIVITY.get(
+                                            call.name, "running a query"
+                                        ),
+                                        "query": statement,
+                                    }
+                                )
+
                         if call.name in BUILDS:
                             coming = _building(token, call.name or "", args)
                             if coming:
@@ -534,6 +678,22 @@ async def stream_turn(
                                     "type": "built",
                                     "token": token,
                                     "panel_id": _made_panel(response.response),
+                                }
+                            )
+
+                        # What the statement already on screen answered with,
+                        # matched by call id. A query block that never resolves
+                        # reads as a query still running.
+                        if response.name in QUERIES:
+                            columns, sample = sql_sample(response.response)
+                            yield _sse(
+                                {
+                                    "type": "ran",
+                                    "token": token,
+                                    "rows": sql_rows(response.response),
+                                    "problem": sql_problem(response.response),
+                                    "columns": columns,
+                                    "sample": sample,
                                 }
                             )
 

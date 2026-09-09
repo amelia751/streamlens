@@ -1,9 +1,13 @@
+"use client";
+
 /**
  * The shadcn / Lucide loader-2 mark: a partial ring that rolls.
  *
  * Not the whole shadcn kit — one SVG, same path, so a connecting screen
  * does not pull a component library in for a spinner.
  */
+
+import { useEffect, useState } from "react";
 
 export function Spinner({ className }: { className?: string }) {
   return (
@@ -25,16 +29,38 @@ export function Spinner({ className }: { className?: string }) {
   );
 }
 
-/** A whole screen, or a whole panel of one, that has nothing to draw yet. */
+/**
+ * A whole screen, or a whole panel of one, that has nothing to draw yet.
+ *
+ * Past a few seconds it says why. The service idles when nobody has queried
+ * it, and waking it takes tens of seconds no amount of frontend work will
+ * shorten — so the wait is named rather than left looking like a hang. Under
+ * that threshold nothing extra appears, which is the ordinary case.
+ */
 export function Connecting({
   label = "Connecting to ClickHouse instance",
+  patience = 4000,
 }: {
   label?: string;
+  patience?: number;
 }) {
+  const [slow, setSlow] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSlow(true), patience);
+    return () => clearTimeout(timer);
+  }, [patience]);
+
   return (
     <div className="connecting" role="status" aria-live="polite">
       <Spinner />
       <p>{label}</p>
+      {slow ? (
+        <p className="connecting-slow">
+          The instance is waking from idle. This takes about half a minute,
+          once.
+        </p>
+      ) : null}
     </div>
   );
 }

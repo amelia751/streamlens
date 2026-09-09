@@ -22,7 +22,15 @@ from google.adk.sessions import Session
 
 from streamlens.agents.analyst.agent import APP_NAME
 from streamlens.agents.analyst.sessions import session_service
-from streamlens.api.chat import TITLE_KEY, conversation_title
+from streamlens.api.chat import (
+    ACTIVITY,
+    QUERIES,
+    TITLE_KEY,
+    conversation_title,
+    sql_problem,
+    sql_rows,
+    sql_sample,
+)
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +56,7 @@ def _is_recap(event: Event) -> bool:
     return bool(actions is not None and getattr(actions, "compaction", None))
 
 
-def replay(session: Session) -> list[dict[str, str]]:
+def replay(session: Session) -> list[dict[str, Any]]:
     """The messages a person would recognise, oldest first.
 
     Thinking is dropped. It is streamed live because a minute of silence
@@ -60,9 +68,16 @@ def replay(session: Session) -> list[dict[str, str]]:
     the user's own turn, because that is what makes a follow-up work, but it
     is a spec and a page of rows — nobody typed it, and reading it back as a
     message would bury the sentence that was typed.
+
+    The SQL is kept, though it is tool traffic by every other measure. It is
+    the evidence for the figures in the reply above it, it folds to one line,
+    and evidence that disappears when the tab is reopened is not evidence.
     """
     from streamlens.api.attachments import MARK
-    messages: list[dict[str, str]] = []
+    messages: list[dict[str, Any]] = []
+    # Where each statement landed in the list, by call id, so its result can
+    # be written back onto it when the response arrives some events later.
+    asked: dict[str, int] = {}
 
     for event in session.events or []:
         if _is_recap(event) or not event.content or not event.content.parts:
@@ -70,9 +85,44 @@ def replay(session: Session) -> list[dict[str, str]]:
 
         role = "user" if event.author == "user" else "agent"
         for part in event.content.parts:
-            # Tool traffic and thinking are not messages.
-            if part.function_call or part.function_response:
+            if part.function_call:
+                call = part.function_call
+                if call.name not in QUERIES:
+                    continue
+                statement = str((call.args or {}).get("query") or "").strip()
+                if not statement:
+                    continue
+                asked[call.id or ""] = len(messages)
+                messages.append(
+                    {
+                        "role": "sql",
+                        "text": statement,
+                        "ran": {
+                            "label": ACTIVITY.get(call.name, "running a query"),
+                            "done": True,
+                        },
+                    }
+                )
                 continue
+
+            if part.function_response:
+                at = asked.pop(part.function_response.id or "", None)
+                if at is None:
+                    continue
+                ran = messages[at]["ran"]
+                rows = sql_rows(part.function_response.response)
+                if rows is not None:
+                    ran["rows"] = rows
+                problem = sql_problem(part.function_response.response)
+                if problem:
+                    ran["problem"] = problem
+                columns, sample = sql_sample(part.function_response.response)
+                if columns:
+                    ran["columns"] = columns
+                if sample:
+                    ran["sample"] = sample
+                continue
+
             if getattr(part, "thought", None):
                 continue
             text = (part.text or "").strip()

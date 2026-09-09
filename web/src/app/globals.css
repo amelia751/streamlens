@@ -941,6 +941,7 @@ a {
   grid-template-columns: var(--rail-width) minmax(0, 1fr);
   grid-template-areas: "rail main";
   height: calc(100dvh - var(--nav-height));
+  overflow: hidden;
 }
 
 .studio:has(> .chat) {
@@ -1530,6 +1531,17 @@ a {
 
 .connecting p {
   margin: 0;
+}
+
+/* The reason for a wait that has gone on long enough to need one. Quieter
+   than the label above it: it explains, it does not announce. */
+.connecting-slow {
+  max-width: 22rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  opacity: 0.8;
+  text-align: center;
 }
 
 /* A whole-page wait, rather than one panel of it, is worth centring. */
@@ -2252,6 +2264,13 @@ a {
   border-radius: 6px;
 }
 
+.bone-title {
+  width: 42%;
+  max-width: 11rem;
+  height: 0.7rem;
+  margin: 0.2rem 0;
+}
+
 /* A tile with nothing in it yet: same border, quieter, so a half-built board
    reads as one board rather than as two kinds of thing. */
 .tile.is-building {
@@ -2320,7 +2339,9 @@ a {
   .report-hero.is-building::after,
   .report-hero-flag,
   .canvas-waiting.is-working,
-  .report-market-wait.is-working {
+  .report-market-wait.is-working,
+  .chat-thought.is-live > .chat-thought-head .chat-thought-title,
+  .sql-note.is-running {
     animation: none;
   }
 }
@@ -2338,7 +2359,10 @@ a {
   display: flex;
   grid-area: chat;
   flex-direction: column;
+  height: 100%;
+  max-height: 100%;
   min-height: 0;
+  overflow: hidden;
   border-left: 1px solid var(--line);
   background: var(--paper);
 }
@@ -2553,12 +2577,22 @@ a {
 
 .chat-log {
   display: flex;
-  flex: 1;
+  flex: 1 1 0;
   flex-direction: column;
   gap: 0.6rem;
   min-height: 0;
   padding: 0.85rem;
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Nothing in the log compresses. It is a column of finished things that
+   scrolls; a flex column with more content than room would otherwise squeeze
+   them, and an entry that clips its own overflow — a query block — has no
+   automatic minimum height to stop it being squeezed flat. */
+.chat-log > * {
+  flex-shrink: 0;
 }
 
 .chat-prompts {
@@ -2604,11 +2638,301 @@ a {
   background: color-mix(in srgb, var(--yellow) 48%, white);
 }
 
-.chat-msg.is-thought {
+/* ----------------------------------------------------------------- sql
+ *
+ * A statement the analyst ran, in the log next to the sentence it produced.
+ * Folded to one line: what matters is that the query is there and can be
+ * copied, so it reads as a receipt rather than as a code listing.
+ */
+
+.sql {
+  min-width: 0;
+  margin: 0.1rem 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--paper) 94%, var(--ink) 6%);
+  overflow: hidden;
+}
+
+.sql-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.35rem 0.2rem 0.15rem;
+}
+
+.sql-open {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0.1rem 0.15rem;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.sql-open:disabled {
+  cursor: default;
+}
+
+.sql-chevron {
+  flex-shrink: 0;
+  width: 0.7rem;
+  color: var(--faint);
+  font-size: 0.7rem;
+  line-height: 1;
+  transition: transform 0.12s ease;
+}
+
+.sql.is-open .sql-chevron {
+  transform: rotate(90deg);
+}
+
+.sql-tag {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+}
+
+.sql-chevron.is-empty {
+  visibility: hidden;
+}
+
+/* The statement itself — the command. Stays on the line when the result
+   opens underneath, the way a shell keeps `$ select …` above its output. */
+.sql-peek {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--faint);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.66rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sql-note {
+  flex-shrink: 0;
+  color: var(--faint);
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.sql-note.is-running {
+  animation: chat-pulse 1.4s ease-in-out infinite;
+}
+
+.sql-note.is-bad {
+  color: #8c1a2b;
+}
+
+.sql-copy {
+  flex-shrink: 0;
+  padding: 0 0.15rem;
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+  font-size: 0.7rem;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.sql:hover .sql-copy,
+.sql-copy:focus-visible,
+.sql-copy.is-copied {
+  opacity: 1;
+}
+
+.sql-copy.is-copied {
+  color: var(--muted);
+}
+
+.sql-out {
+  border-top: 1px solid var(--line);
+}
+
+.sql-scroll {
+  max-height: 11rem;
+  overflow: auto;
+}
+
+.sql-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.64rem;
+  line-height: 1.4;
+}
+
+.sql-table th,
+.sql-table td {
+  padding: 0.28rem 0.55rem;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.sql-table th {
+  position: sticky;
+  top: 0;
+  background: color-mix(in srgb, var(--paper) 88%, var(--ink) 12%);
+  color: var(--faint);
+  font-weight: 550;
+}
+
+.sql-table td {
+  color: var(--muted);
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.sql-empty,
+.sql-problem {
+  margin: 0;
+  padding: 0.4rem 0.6rem 0.5rem 1.05rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.64rem;
+  overflow-wrap: anywhere;
+}
+
+.sql-empty {
+  color: var(--faint);
+}
+
+.sql-problem {
+  color: #8c1a2b;
+}
+
+.chat-thought {
+  min-width: 0;
+}
+
+.chat-thought-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.12rem 0.15rem;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.chat-thought-head:hover {
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.chat-thought-chevron {
+  flex-shrink: 0;
+  width: 0.7rem;
+  color: var(--faint);
+  font-size: 0.7rem;
+  line-height: 1;
+  transition: transform 0.12s ease;
+}
+
+.chat-thought.is-open > .chat-thought-head .chat-thought-chevron {
+  transform: rotate(90deg);
+}
+
+.chat-thought-icon {
+  flex-shrink: 0;
+  width: 0.85rem;
+  height: 0.85rem;
+  color: var(--muted);
+}
+
+.chat-thought-title {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 550;
+}
+
+.chat-thought-clip {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-thought-log {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  margin: 0.15rem 0 0.2rem 0.95rem;
+  padding-left: 0.55rem;
+  border-left: 1px solid var(--line);
+}
+
+.chat-thought-head.is-row {
+  padding-left: 0.2rem;
+}
+
+.chat-thought-body {
+  margin: 0.1rem 0 0.3rem 1.25rem;
   color: var(--faint);
   font-size: 0.72rem;
-  font-style: italic;
-  line-height: 1.45;
+  line-height: 1.5;
+}
+
+.chat-thought-body > :first-child {
+  margin-top: 0;
+}
+
+.chat-thought-body > :last-child {
+  margin-bottom: 0;
+}
+
+.chat-thought-body section + section {
+  margin-top: 0.55rem;
+}
+
+.chat-thought-body h4 {
+  margin: 0 0 0.2rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 550;
+}
+
+.chat-thought-body p,
+.chat-thought-body ul,
+.chat-thought-body ol {
+  margin: 0 0 0.4rem;
+}
+
+.chat-thought-body ul,
+.chat-thought-body ol {
+  padding-left: 1rem;
+}
+
+.chat-thought-body strong {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.chat-thought-body code {
+  font-size: 0.68rem;
+}
+
+.chat-thought.is-live > .chat-thought-head .chat-thought-title {
+  animation: chat-pulse 1.6s ease-in-out infinite;
 }
 
 .chat-msg.is-agent {
@@ -2759,14 +3083,15 @@ a {
   }
 }
 
-/* Charts the user pasted in: pending above the box, kept above the message. */
+/* Charts the user pasted in: inside the box while typing, kept with the
+   message once sent. Either way they read as highlighted words rather than as
+   badges — a tint behind the name, and an x to take it back out. */
 
 .chat-refs {
   display: flex;
   flex-shrink: 0;
   flex-wrap: wrap;
-  gap: 0.3rem;
-  padding: 0.4rem 0.65rem 0;
+  gap: 0.25rem;
 }
 
 /* A sent message and its receipts, kept together on the user's side. */
@@ -2781,7 +3106,6 @@ a {
 
 .chat-said .chat-refs {
   justify-content: flex-end;
-  padding: 0;
 }
 
 .chat-said .chat-msg.is-user {
@@ -2790,43 +3114,47 @@ a {
 
 .chat-ref {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline;
   max-width: 100%;
-  border: 1px solid color-mix(in srgb, var(--purple) 35%, var(--line));
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--purple) 8%, var(--paper));
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--purple) 15%, var(--paper));
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--purple) 40%, transparent);
 }
 
 .chat-ref-open {
   display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
+  align-items: baseline;
+  gap: 0.25rem;
   overflow: hidden;
-  max-width: 15rem;
-  padding: 0.2rem 0.35rem;
+  max-width: 14rem;
+  padding: 0.05rem 0.25rem;
   border: 0;
   background: none;
-  color: var(--ink);
+  color: color-mix(in srgb, var(--purple) 70%, var(--ink));
   cursor: pointer;
   font-family: inherit;
-  font-size: 0.7rem;
+  font-size: 0.74rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chat-ref-mark {
+.chat-ref-open:hover {
   color: var(--purple);
-  font-size: 0.65rem;
+}
+
+.chat-ref-mark {
+  color: color-mix(in srgb, var(--purple) 65%, transparent);
+  font-size: 0.6rem;
 }
 
 .chat-ref-drop {
-  padding: 0.2rem 0.3rem 0.2rem 0;
+  padding: 0.05rem 0.25rem 0.05rem 0;
   border: 0;
   background: none;
-  color: var(--faint);
+  color: color-mix(in srgb, var(--purple) 55%, var(--ink));
   cursor: pointer;
-  font-size: 0.75rem;
-  line-height: 1;
+  font-size: 0.7rem;
+  line-height: 1.45;
 }
 
 .chat-ref-drop:hover {
@@ -2842,12 +3170,29 @@ a {
   border-top: 1px solid var(--line);
 }
 
-.chat-input {
+/* The box that is written in. It holds the charts riding along as well as the
+   text, so the border belongs to the box and not to the textarea inside it. */
+.chat-box {
+  display: flex;
   flex: 1;
-  padding: 0.45rem 0.55rem;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+  padding: 0.4rem 0.5rem;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--paper);
+}
+
+.chat-box:focus-within {
+  border-color: var(--purple);
+}
+
+.chat-input {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--ink);
   font-family: inherit;
   font-size: 0.78rem;
@@ -2856,7 +3201,6 @@ a {
 }
 
 .chat-input:focus {
-  border-color: var(--purple);
   outline: none;
 }
 

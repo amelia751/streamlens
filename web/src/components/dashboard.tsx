@@ -10,7 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Dashboard, Panel } from "@/lib/api";
 import { packRows } from "@/lib/layout";
 import { dashboardLink } from "@/lib/links";
-import { PanelCard, PanelPlaceholder } from "@/components/panel";
+import { BoardSkeleton, PanelCard, PanelPlaceholder } from "@/components/panel";
 import { Connecting } from "@/components/spinner";
 import { useWorkspace, type Build } from "@/components/workspace";
 
@@ -152,9 +152,7 @@ export function DashboardView({ dashboardId }: { dashboardId: string }) {
         // while it writes the first query. Telling the user to ask for a panel
         // in the middle of getting one is the wrong instruction.
         working ? (
-          <p className="canvas-waiting is-working">
-            The analyst is working. Charts appear here as they are made.
-          </p>
+          <BoardSkeleton />
         ) : (
           <p className="canvas-waiting">No panels yet. Ask the analyst for one.</p>
         )

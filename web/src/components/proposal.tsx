@@ -20,7 +20,7 @@ import { packRows } from "@/lib/layout";
 import { proposalLink } from "@/lib/links";
 import type { DashboardSummary } from "@/lib/api";
 import type { Proposal, ProposalPanel } from "@/lib/proposals";
-import { PanelCard, PanelPlaceholder } from "@/components/panel";
+import { BoardSkeleton, PanelCard, PanelPlaceholder } from "@/components/panel";
 import { Connecting } from "@/components/spinner";
 import { useWorkspace, type Build } from "@/components/workspace";
 
@@ -134,9 +134,7 @@ function MarketPanels({ proposal }: { proposal: Proposal }) {
 
   if (proposal.panels.length === 0 && arriving.length === 0) {
     return working ? (
-      <p className="report-market-wait is-working">
-        The analyst is working. Charts appear here as they are made.
-      </p>
+      <BoardSkeleton className="report-market-grid" />
     ) : (
       <p className="report-market-wait">
         No chart on this proposal yet — the argument above is still an idea.

@@ -336,15 +336,51 @@ export function PanelPlaceholder({
       style={{ gridColumn: `span ${width}`, gridRow: `span ${height}` }}
     >
       <header className="tile-head">
-        <h3 className="tile-title" title={title}>
-          {title || "New chart"}
-        </h3>
-        <span className="tile-flag">building</span>
+        {title ? (
+          <h3 className="tile-title" title={title}>
+            {title}
+          </h3>
+        ) : (
+          <span className="bone bone-title" aria-hidden />
+        )}
+        {title ? <span className="tile-flag">building</span> : null}
       </header>
       <div className="tile-body">
         <Bones kind={chart} />
       </div>
     </article>
+  );
+}
+
+/**
+ * A board that is about to exist, drawn as the charts it will hold.
+ *
+ * Used in the gap between creating a dashboard and the first `add_panel`
+ * arriving — a sentence there reads as a stall, and a grey page reads as
+ * empty. These tiles have no titles because the analyst has not named them
+ * yet; they vanish as soon as a real placeholder or a real chart does.
+ */
+const COMING = [
+  { chart: "stat", width: 3, height: 1 },
+  { chart: "stat", width: 3, height: 1 },
+  { chart: "stat", width: 3, height: 1 },
+  { chart: "stat", width: 3, height: 1 },
+  { chart: "bar", width: 6, height: 1 },
+  { chart: "line", width: 6, height: 1 },
+  { chart: "table", width: 12, height: 1 },
+] as const;
+
+export function BoardSkeleton({
+  className = "dash-grid",
+}: {
+  className?: string;
+}) {
+  return (
+    <div className={className} aria-busy="true" aria-label="Charts arriving">
+      {COMING.map((slot, i) => (
+        <PanelPlaceholder key={i} chart={slot.chart} width={slot.width} height={slot.height} />
+      ))}
+    </div>
   );
 }
 
