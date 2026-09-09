@@ -79,6 +79,36 @@ const PROMPTS = [
 // click away in history.
 const RESTORED = 3;
 
+function SendIcon() {
+  return (
+    <svg className="chat-send-icon" viewBox="0 0 16 16" aria-hidden>
+      <path
+        d="M14.2 1.8 1.9 7.1c-.45.2-.4.85.1.95l4.5 1.05 1.05 4.5c.1.5.75.55.95.1L14.2 1.8z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M6.5 9.1 14.2 1.8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+/** Grow the composer with the draft, the way Province's field-sizing does. */
+const BOX_MAX = 200;
+
+function growBox(el: HTMLTextAreaElement | null) {
+  if (!el) return;
+  el.style.height = "auto";
+  el.style.height = `${Math.min(el.scrollHeight, BOX_MAX)}px`;
+}
+
 function ClockIcon() {
   return (
     <svg className="chat-head-icon" viewBox="0 0 16 16" aria-hidden>
@@ -311,10 +341,15 @@ export function Chat() {
   }, []);
 
   const log = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLTextAreaElement>(null);
   // Follow the newest line only while the reader is already at the bottom.
   // A turn writes constantly — thoughts, SQL, activity — and pinning on
   // every write made the log impossible to scroll back through.
   const pinned = useRef(true);
+
+  useEffect(() => {
+    growBox(box.current);
+  }, [current.draft, current.id]);
 
   useEffect(() => {
     pinned.current = true;
@@ -1004,13 +1039,15 @@ export function Chat() {
             />
           )}
           <textarea
+            ref={box}
             className="chat-input"
             value={current.draft}
-            rows={2}
-            placeholder={current.busy ? "Working…" : "Ask for a dashboard"}
-            onChange={(e) =>
-              patch(current.id, (c) => ({ ...c, draft: e.target.value }))
-            }
+            rows={1}
+            placeholder={current.busy ? "Working…" : "Chat with Analyst..."}
+            onChange={(e) => {
+              growBox(e.currentTarget);
+              patch(current.id, (c) => ({ ...c, draft: e.target.value }));
+            }}
             onPaste={(e) => {
               const { refs, rest } = readPasted(
                 e.clipboardData.getData("text/plain"),
@@ -1036,15 +1073,17 @@ export function Chat() {
               }
             }}
           />
+          <Tip label="Send">
+            <button
+              type="submit"
+              className="chat-send"
+              disabled={current.busy || !current.draft.trim()}
+              aria-label="Send"
+            >
+              <SendIcon />
+            </button>
+          </Tip>
         </div>
-
-        <button
-          type="submit"
-          className="chat-send"
-          disabled={current.busy || !current.draft.trim()}
-        >
-          {current.busy ? "…" : "Send"}
-        </button>
       </form>
     </aside>
   );

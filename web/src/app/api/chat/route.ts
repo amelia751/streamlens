@@ -10,6 +10,7 @@ import { BACKEND_URL } from "@/lib/api";
  * is that they arrive during that minute rather than after it.
  */
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   const body = await req.text();

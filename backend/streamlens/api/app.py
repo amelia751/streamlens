@@ -111,18 +111,38 @@ app.mount("/mcp/dashboards", _mcp_app)
 app.mount("/mcp/proposals", _proposal_mcp_app)
 
 # The Next.js app is the only intended caller. Overridable so a deployed
-# frontend origin can be added without a code change.
+# frontend origin can be added without a code change. The regex covers the
+# two Cloud Run URL shapes (*.a.run.app and *.us-central1.run.app).
+_CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get(
+        "STREAMLENS_CORS_ORIGINS", "http://localhost:3000"
+    ).split(",")
+    if origin.strip()
+]
+_CORS_ORIGIN_RE = os.environ.get(
+    "STREAMLENS_CORS_ORIGIN_REGEX",
+    r"https://streamlens-web[-a-z0-9]+\.a\.run\.app"
+    r"|https://streamlens-web-[0-9]+\.us-central1\.run\.app",
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.environ.get(
-        "STREAMLENS_CORS_ORIGINS", "http://localhost:3000"
-    ).split(","),
+    allow_origins=_CORS_ORIGINS,
+    allow_origin_regex=_CORS_ORIGIN_RE or None,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 def client():
     return shared_client()
+
+
+@app.get("/ready")
+def ready() -> dict[str, bool]:
+    """Process is up. Used as the Cloud Run startup probe — does not
+    wait on ClickHouse, which can spend tens of seconds waking."""
+    return {"ok": True}
 
 
 @app.get("/health")

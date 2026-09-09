@@ -2812,6 +2812,16 @@ a {
   color: #8c1a2b;
 }
 
+/* The beats from one stretch of thinking. Tighter than the log's own gap,
+   because they are one stretch, and they sit in the log between the queries
+   they came before and after. */
+.chat-thoughts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  min-width: 0;
+}
+
 .chat-thought {
   min-width: 0;
 }
@@ -2872,21 +2882,12 @@ a {
   white-space: nowrap;
 }
 
-.chat-thought-log {
-  display: flex;
-  flex-direction: column;
-  gap: 0.05rem;
-  margin: 0.15rem 0 0.2rem 0.95rem;
-  padding-left: 0.55rem;
-  border-left: 1px solid var(--line);
-}
-
-.chat-thought-head.is-row {
-  padding-left: 0.2rem;
-}
-
+/* Hung off the row's chevron, so an open beat reads as belonging to the stamp
+   above it rather than as a new entry in the log. */
 .chat-thought-body {
-  margin: 0.1rem 0 0.3rem 1.25rem;
+  margin: 0.15rem 0 0.35rem 1.05rem;
+  padding-left: 0.6rem;
+  border-left: 1px solid var(--line);
   color: var(--faint);
   font-size: 0.72rem;
   line-height: 1.5;
@@ -3162,23 +3163,20 @@ a {
 }
 
 .chat-form {
-  display: flex;
   flex-shrink: 0;
-  align-items: flex-end;
-  gap: 0.45rem;
   padding: 0.65rem;
   border-top: 1px solid var(--line);
 }
 
-/* The box that is written in. It holds the charts riding along as well as the
-   text, so the border belongs to the box and not to the textarea inside it. */
+/* The box that is written in. Charts riding along sit above the text; send
+   sits in the corner of the same field, the way Province parks it. */
 .chat-box {
+  position: relative;
   display: flex;
-  flex: 1;
   flex-direction: column;
   gap: 0.3rem;
   min-width: 0;
-  padding: 0.4rem 0.5rem;
+  padding: 0.45rem 0.55rem 0.45rem;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--paper);
@@ -3189,8 +3187,12 @@ a {
 }
 
 .chat-input {
+  display: block;
   width: 100%;
-  padding: 0;
+  min-height: 3.25rem;
+  max-height: 12.5rem;
+  overflow-y: auto;
+  padding: 0.15rem 2.6rem 0.15rem 0;
   border: 0;
   background: none;
   color: var(--ink);
@@ -3198,26 +3200,52 @@ a {
   font-size: 0.78rem;
   line-height: 1.45;
   resize: none;
+  field-sizing: content;
 }
 
 .chat-input:focus {
   outline: none;
 }
 
+.chat-box > .tip-wrap {
+  position: absolute;
+  right: 0.4rem;
+  bottom: 0.4rem;
+}
+
 .chat-send {
-  padding: 0.45rem 0.7rem;
-  border: 1px solid var(--ink);
-  border-radius: 8px;
-  background: var(--ink);
-  color: var(--paper);
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--muted);
   cursor: pointer;
-  font-size: 0.75rem;
-  font-weight: 600;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.chat-send-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.chat-send:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--purple) 50%, var(--line));
+  background: color-mix(in srgb, var(--purple) 22%, white);
+  color: var(--ink);
 }
 
 .chat-send:disabled {
-  border-color: var(--line);
-  background: var(--line);
+  border-color: transparent;
+  background: transparent;
   color: var(--faint);
   cursor: default;
 }

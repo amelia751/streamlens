@@ -1,15 +1,17 @@
 "use client";
 
 /**
- * A turn's reasoning, as a stamp rather than a transcript.
+ * A turn's reasoning, as stamps rather than a transcript.
  *
- * Gemini titles every beat (`**Investigating Dashboard Options**`). Drawn
- * raw that is a wall of italic paragraphs. Here each heading is reduced to
- * a verb the Studio knows — Investigating, Reading, Designing, Building,
- * Checking — with the icon that goes with it, the way a run log in
- * anhlam/patch stamps Read / Scan / Edit. Consecutive beats of the same
- * verb fold into one row. The whole stream is one block: open while it is
- * still being written, a single "Thought · N" line once it is not.
+ * Gemini titles every beat (`**Investigating Dashboard Options**`). Drawn raw
+ * that is a wall of italic paragraphs. Here each heading is reduced to a verb
+ * the Studio knows — Investigating, Reading, Designing, Building, Checking —
+ * with the icon that goes with it, the way a run log in anhlam/patch stamps
+ * Read / Scan / Edit.
+ *
+ * Beats keep the order they were thought in, so a row sits in the log between
+ * the query it followed and the query it led to. Only a run of the same verb,
+ * one beat after another, folds into a single row.
  */
 
 import { useState } from "react";
@@ -29,43 +31,47 @@ type Stamp = { kind: Kind; label: string };
 
 type Piece = { title: string; body: string };
 
-type Group = Stamp & { members: Piece[] };
+type Beat = Stamp & { members: Piece[] };
 
 const STAINS: { test: RegExp; stamp: Stamp }[] = [
   {
-    test: /^(investigat|explor|discover|review|inspect|look)/i,
+    test: /^(investigat|explor|discover|review|inspect|look|examin)/i,
     stamp: { kind: "investigate", label: "Investigating" },
   },
   {
-    test: /^(read|quer|preview|list|fetch)/i,
+    test: /^(read|quer|preview|list|fetch|pull)/i,
     stamp: { kind: "read", label: "Reading" },
   },
   {
-    test: /^(design|defin|refin|concept|map|structur)/i,
+    test: /^(design|defin|refin|concept|map|structur|plan|choos|select)/i,
     stamp: { kind: "design", label: "Designing" },
   },
   {
-    test: /^(build|add|populat|implement|creat|integrat)/i,
+    test: /^(build|add|populat|implement|creat|integrat|writ)/i,
     stamp: { kind: "build", label: "Building" },
   },
   {
-    test: /^(check|confirm|verif|validat)/i,
+    test: /^(check|confirm|verif|validat|test|correct|fix)/i,
     stamp: { kind: "check", label: "Checking" },
   },
   {
-    test: /^(analyz|interpret|visualiz|summar)/i,
+    test: /^(analyz|assess|interpret|visualiz|summar|calculat|identif|pinpoint)/i,
     stamp: { kind: "analyze", label: "Analyzing" },
   },
 ];
 
 function stampOf(title: string): Stamp {
   const first = title.trim().split(/\s+/)[0] ?? "";
-  return (
-    STAINS.find((row) => row.test.test(first))?.stamp ?? {
-      kind: "think",
-      label: first || "Thought",
-    }
-  );
+  const known = STAINS.find((row) => row.test.test(first))?.stamp;
+  if (known) return known;
+  // An unrecognised verb is still a verb, and reads better as the stamp than
+  // a generic one would: "Grouping", "Weighing". A heading that opens on a
+  // noun — "Market Shorts Data" — has no verb to promote, so it keeps the
+  // plain stamp and shows the whole heading as its subject instead.
+  if (/ing$/i.test(first) && first.length > 4) {
+    return { kind: "think", label: first[0].toUpperCase() + first.slice(1) };
+  }
+  return { kind: "think", label: "Thinking" };
 }
 
 function piecesOf(text: string): Piece[] {
@@ -80,29 +86,20 @@ function piecesOf(text: string): Piece[] {
   }));
 }
 
-function fold(pieces: Piece[]): Group[] {
-  // By stamp, in the order a stamp first appeared — not by consecutive
-  // runs. Gemini interleaves Designing / Analyzing / Designing; folding
-  // only neighbours still leaves a play-by-play. The Studio wants the
-  // signature: one Investigating row, one Designing row.
-  const groups: Group[] = [];
-  const index = new Map<Kind, Group>();
+/** Runs of the same verb, in the order they were thought. */
+function beatsOf(pieces: Piece[]): Beat[] {
+  const beats: Beat[] = [];
   for (const piece of pieces) {
     const stamp = stampOf(piece.title);
-    const existing = index.get(stamp.kind);
-    if (existing) {
-      existing.members.push(piece);
-    } else {
-      const group: Group = { ...stamp, members: [piece] };
-      index.set(stamp.kind, group);
-      groups.push(group);
-    }
+    const last = beats[beats.length - 1];
+    if (last && last.kind === stamp.kind) last.members.push(piece);
+    else beats.push({ ...stamp, members: [piece] });
   }
-  return groups;
+  return beats;
 }
 
 /** The heading minus the verb the stamp already says. */
-function restOf(title: string, label: string): string {
+function subjectOf(title: string, label: string): string {
   return title.replace(new RegExp(`^${label}\\s+`, "i"), "").trim();
 }
 
@@ -174,38 +171,49 @@ function Icon({ kind }: { kind: Kind }) {
   }
 }
 
-function GroupRow({
-  group,
+/** One stamped row: the verb, what it was about, and the reasoning on ask. */
+function BeatRow({
+  beat,
+  live,
   markdown,
 }: {
-  group: Group;
+  beat: Beat;
+  live?: boolean;
   markdown: Components;
 }) {
-  const [open, setOpen] = useState(false);
-  const last = group.members[group.members.length - 1];
-  const detail =
-    group.members.length > 1
-      ? `${group.members.length} thoughts`
-      : restOf(last.title, group.label) || last.body.replace(/\s+/g, " ");
+  const [forced, setForced] = useState<boolean | null>(null);
+  const open = forced ?? Boolean(live);
+
+  // The most recent subject, not a count: the row is a place in the turn, and
+  // where the thinking has got to says more than how many sentences it took.
+  const latest = beat.members[beat.members.length - 1];
+  const subject =
+    subjectOf(latest.title, beat.label) || latest.body.replace(/\s+/g, " ");
 
   return (
-    <div className={`chat-thought-row${open ? " is-open" : ""}`}>
+    <div
+      className={`chat-thought${open ? " is-open" : ""}${live ? " is-live" : ""}`}
+    >
       <button
         type="button"
-        className="chat-thought-head is-row"
+        className="chat-thought-head"
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => setForced(!open)}
       >
-        <Icon kind={group.kind} />
-        <span className="chat-thought-title">{group.label}</span>
-        {detail ? <span className="chat-thought-clip">{detail}</span> : null}
+        <span className="chat-thought-chevron" aria-hidden>
+          ›
+        </span>
+        <Icon kind={beat.kind} />
+        <span className="chat-thought-title">{beat.label}</span>
+        {subject ? <span className="chat-thought-clip">{subject}</span> : null}
       </button>
+
       {open && (
         <div className="chat-thought-body">
-          {group.members.map((piece, i) => (
+          {beat.members.map((piece, i) => (
             <section key={`${piece.title}-${i}`}>
-              {group.members.length > 1 && restOf(piece.title, group.label) ? (
-                <h4>{restOf(piece.title, group.label)}</h4>
+              {beat.members.length > 1 && subjectOf(piece.title, beat.label) ? (
+                <h4>{subjectOf(piece.title, beat.label)}</h4>
               ) : null}
               <Markdown remarkPlugins={[remarkGfm]} components={markdown}>
                 {piece.body || piece.title}
@@ -227,49 +235,18 @@ export function Thought({
   live?: boolean;
   markdown: Components;
 }) {
-  const pieces = piecesOf(text);
-  const groups = fold(pieces);
-  const latest = pieces[pieces.length - 1];
-  const stamp = latest ? stampOf(latest.title) : { kind: "think" as const, label: "Thought" };
-  const [forced, setForced] = useState<boolean | null>(null);
-  const open = forced ?? Boolean(live);
-
-  const headline = live
-    ? restOf(latest?.title ?? "", stamp.label) || stamp.label
-    : pieces.length > 1
-      ? `${pieces.length} thoughts`
-      : restOf(latest?.title ?? "", stamp.label);
+  const beats = beatsOf(piecesOf(text));
 
   return (
-    <div className={`chat-thought${open ? " is-open" : ""}${live ? " is-live" : ""}`}>
-      <button
-        type="button"
-        className="chat-thought-head"
-        aria-expanded={open}
-        onClick={() => setForced(!open)}
-      >
-        <span className="chat-thought-chevron" aria-hidden>
-          ›
-        </span>
-        <Icon kind={live ? stamp.kind : "think"} />
-        <span className="chat-thought-title">
-          {live ? stamp.label : "Thought"}
-        </span>
-        {headline && headline !== stamp.label ? (
-          <span className="chat-thought-clip">{headline}</span>
-        ) : null}
-      </button>
-      {open && (
-        <div className="chat-thought-log">
-          {groups.map((group, i) => (
-            <GroupRow
-              key={`${group.kind}-${i}`}
-              group={group}
-              markdown={markdown}
-            />
-          ))}
-        </div>
-      )}
+    <div className="chat-thoughts">
+      {beats.map((beat, i) => (
+        <BeatRow
+          key={`${beat.kind}-${i}`}
+          beat={beat}
+          live={live && i === beats.length - 1}
+          markdown={markdown}
+        />
+      ))}
     </div>
   );
 }

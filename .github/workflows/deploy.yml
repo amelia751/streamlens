@@ -1,0 +1,117 @@
+# Build images on the runner and deploy to Cloud Run.
+# Runtime credentials come from Secret Manager, mounted by Cloud Run.
+# This workflow never reads secrets/ and never stores key files in GitHub.
+name: Deploy Cloud Run
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: cloudrun-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT: pctg-503822
+  REGION: us-central1
+  AR: us-central1-docker.pkg.dev/pctg-503822/streamlens
+
+jobs:
+  api:
+    name: API
+    runs-on: ubuntu-latest
+    outputs:
+      url: ${{ steps.url.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Authorize Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      - name: Build and push
+        run: |
+          set -euo pipefail
+          IMAGE="${AR}/api:${GITHUB_SHA}"
+          docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
+            -t "${IMAGE}" -t "${AR}/api:latest" --push backend
+
+      - name: Deploy
+        run: |
+          set -euo pipefail
+          gcloud run deploy streamlens-api \
+            --image "${AR}/api:${GITHUB_SHA}" \
+            --region "${REGION}" \
+            --project "${PROJECT}" \
+            --service-account "streamlens-api@${PROJECT}.iam.gserviceaccount.com" \
+            --allow-unauthenticated \
+            --memory 2Gi \
+            --cpu 2 \
+            --timeout 360 \
+            --concurrency 20 \
+            --min-instances 1 \
+            --max-instances 3 \
+            --port 8080 \
+            --startup-probe=httpGet.path=/ready,httpGet.port=8080,initialDelaySeconds=5,periodSeconds=10,failureThreshold=12 \
+            --set-secrets "^|^CLICKHOUSE_HOST=streamlens-clickhouse-host:latest|CLICKHOUSE_USER=streamlens-clickhouse-user:latest|CLICKHOUSE_PASSWORD=streamlens-clickhouse-password:latest|CLICKHOUSE_READER_USER=streamlens-clickhouse-reader-user:latest|CLICKHOUSE_READER_PASSWORD=streamlens-clickhouse-reader-password:latest|CLICKHOUSE_CLOUD_API_KEY=streamlens-clickhouse-cloud-api-key:latest|CLICKHOUSE_CLOUD_API_SECRET=streamlens-clickhouse-cloud-api-secret:latest|CLICKHOUSE_ORG_ID=streamlens-clickhouse-org-id:latest|CLICKHOUSE_SERVICE_ID=streamlens-clickhouse-service-id:latest|TMDB_READ_ACCESS_TOKEN=streamlens-tmdb-read-access-token:latest|TMDB_API_KEY=streamlens-tmdb-api-key:latest" \
+            --set-env-vars "^|^CLICKHOUSE_PORT=8443|CLICKHOUSE_SECURE=true|CLICKHOUSE_VERIFY=true|STREAMLENS_SESSION_BACKEND=vertex|STREAMLENS_MEMORY_BACKEND=vertex|STREAMLENS_MCP_URL=https://streamlens-clickhouse-mcp-148137280149.us-central1.run.app/mcp"
+
+      - id: url
+        name: Service URL
+        run: |
+          url="$(gcloud run services describe streamlens-api --region "${REGION}" --format='value(status.url)')"
+          echo "url=${url}" >> "${GITHUB_OUTPUT}"
+
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+    needs: api
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Authorize Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      - name: Build and push
+        run: |
+          set -euo pipefail
+          IMAGE="${AR}/web:${GITHUB_SHA}"
+          docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
+            --build-arg "BACKEND_URL=${{ needs.api.outputs.url }}" \
+            -t "${IMAGE}" -t "${AR}/web:latest" --push web
+
+      - name: Deploy
+        run: |
+          set -euo pipefail
+          gcloud run deploy streamlens-web \
+            --image "${AR}/web:${GITHUB_SHA}" \
+            --region "${REGION}" \
+            --project "${PROJECT}" \
+            --service-account "streamlens-web@${PROJECT}.iam.gserviceaccount.com" \
+            --allow-unauthenticated \
+            --memory 1Gi \
+            --cpu 1 \
+            --timeout 360 \
+            --concurrency 80 \
+            --min-instances 0 \
+            --max-instances 3 \
+            --port 8080 \
+            --set-env-vars "BACKEND_URL=${{ needs.api.outputs.url }}"

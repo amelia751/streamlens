@@ -1,0 +1,11 @@
+.venv
+.data
+**/__pycache__
+**/*.pyc
+**/*.pyo
+.ruff_cache
+.pytest_cache
+*.md
+deploy
+scripts
+**/.DS_Store

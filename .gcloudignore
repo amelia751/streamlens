@@ -1,0 +1,10 @@
+.git
+.gcloud
+.cursor
+secrets
+submission
+data
+**/.venv
+**/node_modules
+**/.next
+**/.data
