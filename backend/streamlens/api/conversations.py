@@ -56,22 +56,31 @@ def _is_recap(event: Event) -> bool:
     return bool(actions is not None and getattr(actions, "compaction", None))
 
 
+def _append_thought(messages: list[dict[str, Any]], text: str) -> None:
+    """Add a thought in the same place the live stream would have put it.
+
+    Consecutive thought parts fold into one message so the Studio can stamp
+    them as one stretch — the same join `chat.tsx` does while the turn is
+    still being written. A query or a reply in between starts a new stretch.
+    """
+    last = messages[-1] if messages else None
+    if last and last.get("role") == "thought":
+        last["text"] = last["text"].rstrip() + "\n\n" + text
+    else:
+        messages.append({"role": "thought", "text": text})
+
+
 def replay(session: Session) -> list[dict[str, Any]]:
     """The messages a person would recognise, oldest first.
 
-    Thinking is dropped. It is streamed live because a minute of silence
-    looks broken, but a reopened thread is being read rather than waited on,
-    and forty paragraphs of deliberation above the answer is not a
-    transcript.
+    Order is the order the parts arrived: a thought, then the query it led
+    to, then the reply. The live log is that sequence, and a refresh that
+    drops the stamps in the middle of it is a different conversation.
 
-    So is the block describing a chart the user attached. It rides along in
-    the user's own turn, because that is what makes a follow-up work, but it
-    is a spec and a page of rows — nobody typed it, and reading it back as a
-    message would bury the sentence that was typed.
-
-    The SQL is kept, though it is tool traffic by every other measure. It is
-    the evidence for the figures in the reply above it, it folds to one line,
-    and evidence that disappears when the tab is reopened is not evidence.
+    The block describing a chart the user attached is dropped. It rides
+    along in the user's own turn, because that is what makes a follow-up
+    work, but it is a spec and a page of rows — nobody typed it, and reading
+    it back as a message would bury the sentence that was typed.
     """
     from streamlens.api.attachments import MARK
     messages: list[dict[str, Any]] = []
@@ -123,10 +132,11 @@ def replay(session: Session) -> list[dict[str, Any]]:
                     ran["sample"] = sample
                 continue
 
-            if getattr(part, "thought", None):
-                continue
             text = (part.text or "").strip()
             if not text or text.startswith(MARK):
+                continue
+            if getattr(part, "thought", None):
+                _append_thought(messages, text)
                 continue
             messages.append({"role": role, "text": text})
 

@@ -1,48 +1,224 @@
 # Streamlens
 
-**What a studio promotes, against what actually performs.**
+Streamlens is an analytics and theme-proposal tool that lets **non-technical filmmakers harness ClickHouse through Gemini**. The warehouse holds ~268 million rows of public streaming signal — Netflix's Weekly Top 10, the 44 YouTube channels that promote it, IMDb, TMDB, MovieLens. The filmmaker writes no SQL, opens no table, and files no request with strategy. They ask in plain language.
 
-Netflix publishes its Weekly Top 10. It also runs 44 YouTube channels that push
-trailers, clips and Shorts into every major market. Nobody joins the two, so a
-question a commissioning editor asks constantly — *did the promotional push
-match the result?* — has no answer you can look up.
+From that one question, filmmakers can investigate where audience heat is forming, set a promotional push against what actually charted, see which markets already claimed a title, and turn the answer into a **theme proposal** — logline, budget band, character archetypes, a generated hero still — with the charts that justify it adopted into the pitch itself.
 
-Streamlens answers it. Public streaming data lands in **ClickHouse Cloud**, a
-**Gemini** agent on **Google Cloud** reads it through a fixed retrieval
-pipeline, and three dashboards make the mismatches visible.
+![Architecture Diagram](docs/architecture.png)
 
-The finding the product is built around: promotional weight and audience
-outcome come apart constantly. *Stranger Things* ran 86 clips across 18
-channels and returned 5.8 billion hours. *Bridgerton* ran 2 clips and charted
-for 22 weeks. Those are very different businesses, and the difference is
-invisible in either dataset alone.
+## Run
 
----
+**Prerequisites:** Python 3.11+ with [uv](https://docs.astral.sh/uv/), Node 20+,
+a ClickHouse Cloud service, and a Google Cloud project with Vertex AI enabled.
 
-## Live
+Create `secrets/` (git-ignored) with:
 
-Cloud Run service URLs. They belong to the service, not a revision, so a
-redeploy — including the GitHub Action on `main` — does not change them.
-
-| | URL |
+| File | Contents |
 |---|---|
-| **App** | https://streamlens-web-148137280149.us-central1.run.app |
-| **API** | https://streamlens-api-148137280149.us-central1.run.app |
+| `clickhouse.env` | `CLICKHOUSE_HOST`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD` |
+| `pctg-sa.json` | Google Cloud service-account key with Vertex AI access |
+| `youtube.env` | `YOUTUBE_API_KEY` restricted to `youtube.googleapis.com` |
+| `gcs.env` | HMAC credentials for ClickPipes against the raw bucket |
 
----
+```bash
+cd backend && uv sync
+uv run uvicorn streamlens.api:app --port 8000
 
-## Where the platforms are used
+cd web && npm install && npm run dev
+```
 
-Two files, one per platform. Each registers every service the product uses,
-constructs its clients, and holds every call into it — and the rest of the
-codebase imports from them, so nothing here is named without being called.
-Both are executable: running one calls every service it registers and prints
-what came back.
+Open http://localhost:3000 and ask the analyst a question in Studio. The same
+app is live at https://streamlens-web-148137280149.us-central1.run.app — the
+URL belongs to the Cloud Run service, so a redeploy does not change it.
 
-| Platform | File | Run it |
+`GET /health` confirms the ClickHouse connection. `GET /api/queries` lists
+every named query the rooms can run.
+
+## Layout
+
+```
+.
+├── README.md
+├── LICENSE
+├── docs/
+│   └── architecture.png      the figure above, drawn from /diagram
+│
+├── backend/
+│   ├── pyproject.toml
+│   ├── streamlens/
+│   │   ├── config.py         settings; reads ../secrets/*.env, env wins
+│   │   ├── services/         one directory per platform, one registry each
+│   │   │   ├── gcp/          gcp_services.py — every Google Cloud call
+│   │   │   └── clickhouse/   clickhouse_services.py — every ClickHouse call
+│   │   ├── dashboards/       panel spec, chart registry, store, tool surface
+│   │   ├── proposals/        one-sheet doc, store, stills, tool surface
+│   │   ├── mcp/              the two in-repo MCP servers + their toolsets
+│   │   ├── api/              FastAPI; mounts /mcp/dashboards, /mcp/proposals
+│   │   └── agents/
+│   │       ├── analyst/      the one agent — Studio chat
+│   │       └── greenlight/   fixed-pipeline brief, no model-authored SQL
+│   ├── scripts/
+│   │   ├── ask_agent.py      drive the analyst locally, one turn per argument
+│   │   ├── probe_chat.py     the same turns over the HTTP the browser uses
+│   │   └── seed_proposal.py  three worked proposals; --stills to generate art
+│   └── deploy/
+│       └── deploy.sh         secrets | mcp | agent
+│
+├── web/
+│   ├── src/app/
+│   │   ├── page.tsx          the rooms
+│   │   ├── data/             greenlight, rollout, promo
+│   │   ├── studio/           canvas + analyst chat
+│   │   ├── diagram/          the figure above
+│   │   └── problem/          the appendix
+│   └── src/components/
+│       ├── chat.tsx          streams the analyst
+│       ├── canvas.tsx        twelve-column grid the agent writes
+│       ├── proposal.tsx      the one-sheet
+│       └── diagram.tsx       public sources → warehouse → tools → cloud
+│
+├── scripts/
+│   ├── youtube/              schema, sync, 30-day TTL
+│   ├── clickhouse/           ClickPipes + the reader identity
+│   └── gcs/                  raw-lake upload
+│
+├── data/                     one folder per public source + download.py
+└── secrets/                  gitignored credentials
+```
+
+`services/` holds only platform access; agent behaviour lives in `agents/`.
+Within `services/`, each platform has exactly one registry that constructs
+every client and makes every call. Nothing else in the codebase opens a
+ClickHouse connection or builds a Google client.
+
+## Warehouse
+
+Every chart on every page is a `SELECT` against ClickHouse Cloud. 17 ClickPipes
+ingest the static sources from `gs://streamlens-data`; the YouTube pipeline
+inserts over HTTPS and never lands in the lake.
+
+| Source | What it is |
+|---|---|
+| Netflix Weekly Top 10 | Official Tudum TSVs, 94 countries, 3,428 titles |
+| YouTube Data API v3 | 44 verified Netflix channels, public statistics only |
+| IMDb / TMDB / MovieLens | Reception, artwork, 32 million ratings |
+| VOD clickstream / Netflix Prize | Session shape and historical preference, not current viewing |
+
+**YouTube data never touches the raw lake.** The YouTube API Developer Policies
+require API data to be deleted or refreshed within 30 days, and an immutable
+GCS archive cannot honour that. Every YouTube-derived table — including
+`promo_top10_bridge` — carries `TTL … INTERVAL 30 DAY`. The refresh cadence is
+21 days, so rows are renewed before the TTL fires.
+
+Two identities, deliberately not mixed. `default` writes dashboard and proposal
+definitions through typed helpers the model never supplies SQL for.
+`streamlens_reader` holds `SELECT` on `landing` and `youtube` and nothing else,
+under `readonly = 2`. Every query the model had a hand in runs as that second
+identity.
+
+The browser never sends SQL. It names a query from
+[`api/queries.py`](backend/streamlens/api/queries.py) and passes typed
+parameters that ClickHouse binds server-side, so the full set of statements the
+rooms can run is auditable in one file.
+
+## Agents
+
+A chart that hallucinates is worse than no chart, so the model is kept out of
+the chart path. What differs between the two agents is how much of the query
+the model gets to choose.
+
+**Deterministic** —
+[`agents/greenlight`](backend/streamlens/agents/greenlight/agent.py) runs the
+same four named queries in the same order for every title, then hands the
+results to Gemini to synthesise. No figure in the brief can be invented,
+because the model never issues a query.
+
+**Exploratory** — [`agents/analyst`](backend/streamlens/agents/analyst/agent.py)
+is the one Studio talks to, and the only agent in the product. Up to three MCP
+servers: ClickHouse to read, dashboards to build, proposals to pitch. It
+authors SQL, but never *serves* it: a panel's query is validated once when it
+is saved and replayed from storage thereafter.
+
+The same agent is deployed twice. Beside the API it holds warehouse credentials
+and can author. On Agent Runtime it deliberately holds none — it reaches
+ClickHouse through an IAM-gated Cloud Run MCP that holds them itself — so
+`authoring_enabled()` attaches the warehouse toolset alone and assembles an
+instruction that never mentions a tool it does not have.
+
+## Tools
+
+All of them are registered from three servers. `mcp-clickhouse` is the official
+read-only server, pointed at the warehouse.
+[`mcp/dashboards.py`](backend/streamlens/mcp/dashboards.py) and
+[`mcp/proposals.py`](backend/streamlens/mcp/proposals.py) are in-repo: the API
+mounts them over streamable HTTP, and any other MCP client can run them over
+stdio.
+
+```bash
+uv run python -m streamlens.mcp.dashboards
+uv run python -m streamlens.mcp.proposals
+```
+
+A write that fails validation comes back as `{"ok": false, "problems": [...]}`
+with the real column list attached, so the model corrects itself on the next
+turn instead of seeing a stack trace. Every successful write returns a `link`
+to what actually landed on the canvas.
+
+| Tool | What it does |
+| --- | --- |
+| `list_databases` | Databases the reader can see |
+| `list_tables` | Tables in one of them |
+| `run_query` | A read-only `SELECT` |
+| `warehouse_overview` | Catalog in one call — skip walking every table |
+| `preview_query` | Run a `SELECT` without saving it; returns a glance |
+| `read_panels` | Replay saved queries, not just their specs |
+| `list_dashboards` / `get_dashboard` | What exists, and one grid |
+| `create_dashboard` / `update_dashboard` / `delete_dashboard` | The grid itself |
+| `add_panel` / `update_panel` / `delete_panel` | One chart on that grid |
+| `list_proposals` / `read_proposal` | One-sheets, with live glances |
+| `create_proposal` / `update_proposal` / `delete_proposal` | The pitch |
+| `adopt_panel` | Copy a dashboard chart onto a proposal — the copy is its own |
+| `add_proposal_panel` / `delete_proposal_panel` | A chart that belongs only to the pitch |
+| `generate_still` | A Nano Banana Pro still from a prompt, nothing else |
+
+## What it writes
+
+Both live in the warehouse they describe, in `streamlens.*`, as
+ReplacingMergeTree rows versioned by `updated_at`. Neither ever stores rows —
+only the query — so what is on screen is live.
+
+| | Dashboard | Theme proposal |
 |---|---|---|
-| **Google Cloud** | [`backend/streamlens/services/gcp/gcp_services.py`](backend/streamlens/services/gcp/gcp_services.py) | `uv run python -m streamlens.services.gcp.gcp_services` |
-| **ClickHouse Cloud** | [`backend/streamlens/services/clickhouse/clickhouse_services.py`](backend/streamlens/services/clickhouse/clickhouse_services.py) | `uv run python -m streamlens.services.clickhouse.clickhouse_services` |
+| For | An allocator: *what does the data say?* | A filmmaker: *what should I make?* |
+| Is | A titled grid of panels | A one-sheet — hook, logline, cast, theme — with charts underneath |
+| Tables | `dashboard`, `panel` | `proposal`, `proposal_panel`, `proposal_still` |
+| Charts | Its own | **Copies.** `adopt_panel` duplicates a dashboard panel's query and spec, so deleting or editing that dashboard cannot change or break the pitch |
+| Images | None | Up to three stills in `gs://streamlens-proposals`, keyed server-side |
+
+That copy rule is the whole design. A proposal someone has read must not
+silently acquire different evidence because a dashboard was edited underneath
+it — and it must not collapse into an error because one was deleted. Schema in
+[`proposals/schema.sql`](backend/streamlens/proposals/schema.sql).
+
+The rooms on `/data` are the other half: named queries, no model in the path.
+Greenlight is promo against the Top 10. Rollout is the same titles across 94
+countries. Promo is how the 44-channel operation actually publishes.
+
+## Checking it yourself
+
+The two platform registries are live integration tests. Each walks every
+service it registers, calls it for real, and prints what came back. Credentials
+come from `secrets/` as above.
+
+```bash
+cd backend && uv sync
+
+uv run python -m streamlens.services.gcp.gcp_services
+uv run python -m streamlens.services.clickhouse.clickhouse_services
+
+uv run python scripts/ask_agent.py "What data do you have access to?"
+uv run python scripts/probe_chat.py "I'm a filmmaker. Give me an idea."
+```
 
 ```
 $ uv run python -m streamlens.services.gcp.gcp_services
@@ -67,199 +243,19 @@ service streamlens · cqobxgg69k.us-central1.gcp.clickhouse.cloud:8443
   ok   MCP server: 3 read-only tools over Cloud Run over HTTP: list_databases, list_tables, run_query
 ```
 
-**Google Cloud** — Vertex AI (`gemini-3.8-flash` for the agent and the brief,
-`gemini-3-pro-image` for stills, plus Search grounding and the code sandbox),
-Cloud Storage (raw lake and stills, separate buckets), Cloud Run (the IAM-gated
-MCP service), Agent Engine (the deployed analyst), Secret Manager.
+`ask_agent.py` drives the analyst in-process — Vertex, the ClickHouse MCP
+server, and the in-repo dashboard and proposal servers — and prints every tool
+call. Turns share a session, so a second argument can refer to what the first
+built. Set `STREAMLENS_TRACE` to a path and every call and result is also
+written there as JSON, untruncated.
 
-**ClickHouse Cloud** — the SQL interface under two identities, the Cloud REST
-API for ClickPipes state, 17 ClickPipes ingesting from GCS, the
-`mcp-clickhouse` server the agent explores through, and the
-ReplacingMergeTree stores holding dashboards and proposals.
+`probe_chat.py` sends the same turns to `/api/chat` and reads the server-sent
+events, so what it measures is what the browser actually receives. The API
+must be running.
 
----
+Worked ladders — one numbered turn after another, against the live Studio —
+live in [`submission/questions.md`](submission/questions.md).
 
-## Architecture
-
-```
-  Netflix Top 10 (public)  ─┐
-  IMDb / MovieLens / TMDB  ─┼─► GCS raw lake ──► ClickPipes ──► ClickHouse Cloud
-  VOD clickstream          ─┘                                      (landing.*)
-                                                                       │
-  YouTube Data API v3 ─────► sync.py ────────────────────────────►  (youtube.*)
-     44 Netflix channels     direct insert, never lands in GCS         │
-     30-day TTL enforced                                               │
-                                                                       ▼
-                                              refreshable MV: promo_top10_bridge
-                                                                       │
-                          ┌────────────────────────────────────────────┤
-                          ▼                                            ▼
-              FastAPI named-query registry                Gemini 3.8 Flash (Vertex)
-              (backend/streamlens/api)                    fixed 4-step pipeline
-                          │                                            │
-                          └──────────────► Next.js dashboards ◄────────┘
-```
-
-**Google Cloud, at runtime:** Vertex AI (`google-genai`, Gemini 3.8 Flash on the
-global endpoint) generates the greenlight brief, and Nano Banana Pro
-(`gemini-3-pro-image`, same endpoint) generates the still behind a theme
-proposal. Cloud Storage holds the raw lake in `gs://streamlens-data`, and the
-generated stills in a separate `gs://streamlens-proposals` — separate because
-`raw/` is immutable and a model-driven write path must not share an IAM
-boundary with it. Neither bucket is public; stills are served only through
-[`/api/proposals/{id}/stills/{sid}`](backend/streamlens/api/app.py), so a URL
-cannot outlive the proposal that owns it. The YouTube Data API v3 key is issued
-and restricted in the same project.
-Service-account credentials are loaded in
-[`backend/streamlens/config.py`](backend/streamlens/config.py) and the model is
-constructed in
-[`backend/streamlens/services/gcp/vertex.py`](backend/streamlens/services/gcp/vertex.py).
-
-**ClickHouse Cloud, at runtime:** every chart on every page is a `SELECT`
-against ClickHouse. 17 ClickPipes ingest the static sources from GCS; the
-YouTube pipeline inserts over the HTTPS interface directly. The agent reaches
-the warehouse through the official `mcp-clickhouse` MCP server, read-only.
-Client in
-[`backend/streamlens/services/clickhouse/client.py`](backend/streamlens/services/clickhouse/client.py),
-MCP toolset in
-[`backend/streamlens/services/clickhouse/mcp.py`](backend/streamlens/services/clickhouse/mcp.py).
-
----
-
-## The dashboards
-
-| Dashboard | Question it answers |
-|---|---|
-| **The Greenlight Room** | Did the promotional push match the Top 10 result? Surfaces heavy-push/weak-chart titles and the inverse. |
-| **The Global Rollout** | Which titles travel? The Weekly Top 10 across 94 countries and five years. |
-| **The Promo Machine** | How does the 44-channel operation actually publish? Cadence, Shorts mix, market coverage. |
-| **Title dossier** | One title across every source, with the Gemini brief on top. |
-| **Studio** | The warehouse as a workspace: the live ClickPipe rail, agent-built dashboards on a twelve-column grid, and theme proposals. |
-
-### Two things the agent writes
-
-Both live in the warehouse they describe, in `streamlens.*`, as
-ReplacingMergeTree rows versioned by `updated_at`. Neither ever stores rows —
-only the query — so what is on screen is live.
-
-| | Dashboard | Theme proposal |
-|---|---|---|
-| For | An allocator: *what does the data say?* | A filmmaker: *what should I make?* |
-| Is | A titled grid of panels | A one-sheet — hook, logline, cast, theme — with charts underneath |
-| Tables | `dashboard`, `panel` | `proposal`, `proposal_panel`, `proposal_still` |
-| Charts | Its own | **Copies.** `adopt_panel` duplicates a dashboard panel's query and spec, so deleting or editing that dashboard cannot change or break the pitch. What is kept of the source is a label, never a foreign key |
-| Images | None | Up to three Nano Banana Pro stills in GCS, keyed server-side; the model passes a prompt and nothing else |
-
-That copy rule is the whole design. A proposal someone has read must not
-silently acquire different evidence because a dashboard was edited underneath
-it — and it must not collapse into an error because one was deleted. Schema in
-[`proposals/schema.sql`](backend/streamlens/proposals/schema.sql).
-
----
-
-## Two kinds of agent, on purpose
-
-A chart that hallucinates is worse than no chart, so the model is kept out of
-the chart path entirely. What differs between the two is how much of the query
-the model gets to choose.
-
-**Deterministic** — [`agents/greenlight`](backend/streamlens/agents/greenlight/agent.py)
-runs the same four named queries in the same order for every title, then hands
-the results to Gemini to synthesise. No figure in the brief can be invented,
-because the model never issues a query. The brief and the dashboard read from
-one registry, so they cannot disagree.
-
-**Exploratory** — [`agents/analyst`](backend/streamlens/agents/analyst/agent.py)
-is the one the Studio chat talks to, and the only agent in the product. Up to
-three MCP servers: ClickHouse to read,
-[dashboards](backend/streamlens/mcp/dashboards.py) to build, and
-[proposals](backend/streamlens/mcp/proposals.py) to pitch. It authors SQL, but
-never *serves* it: a panel's query is validated once when it is saved and
-replayed from storage thereafter, so no chart on the canvas is drawn from
-something the model said this turn.
-
-"Up to three", because the same agent is deployed twice. Beside the API it
-holds warehouse credentials and can author. On Agent Runtime it deliberately
-holds none — it reaches ClickHouse through an IAM-gated Cloud Run MCP that
-holds them itself — so `authoring_enabled()` attaches the warehouse toolset
-alone and assembles an instruction that never mentions a tool it does not have.
-
-Every model-influenced query — the MCP's and every stored panel's — runs as
-`streamlens_reader`, which holds `SELECT` on `landing` and `youtube` and
-nothing else, under `readonly = 2`. Dashboards and proposals are read and
-written by `default` through typed helpers the model never supplies SQL for.
-
-The browser never sends SQL. It names a query from
-[`api/queries.py`](backend/streamlens/api/queries.py) and passes typed
-parameters that ClickHouse binds server-side, so the full set of statements the
-product can run is auditable in one file.
-
----
-
-## Running it
-
-**Prerequisites:** Python 3.11+ with [uv](https://docs.astral.sh/uv/), Node 20+,
-a ClickHouse Cloud service, and a Google Cloud project with Vertex AI enabled.
-
-Create `secrets/` (git-ignored) with:
-
-| File | Contents |
-|---|---|
-| `clickhouse.env` | `CLICKHOUSE_HOST`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD` |
-| `pctg-sa.json` | Google Cloud service-account key with Vertex AI access |
-| `youtube.env` | `YOUTUBE_API_KEY` restricted to `youtube.googleapis.com` |
-| `gcs.env` | HMAC credentials for ClickPipes against the raw bucket |
-
-```bash
-# 1. schema, then ingest
-python3 scripts/youtube/apply_sql.py scripts/youtube/schema.sql
-python3 scripts/youtube/apply_sql.py scripts/youtube/analytics.sql
-python3 scripts/youtube/sync.py --plan      # quota estimate, makes no API calls
-python3 scripts/youtube/sync.py --backfill  # full crawl; --resume reuses cached ids
-
-# 2. backend
-cd backend && uv sync
-uv run uvicorn streamlens.api:app --port 8000
-
-# 3. web
-cd web && npm install && npm run dev   # http://localhost:3000
-
-# optional: three worked proposals, with charts adopted from live dashboards
-cd backend && uv run python scripts/seed_proposal.py           # rows only
-cd backend && uv run python scripts/seed_proposal.py --stills  # + generated stills
-```
-
-`GET /health` confirms the ClickHouse connection. `GET /api/queries` lists every
-query the dashboards can run.
-
----
-
-## Data provenance and compliance
-
-Every number is publicly observed or published. None of it is Netflix internal
-data, and the dashboards say so.
-
-**YouTube data never touches the raw lake.** The YouTube API Developer Policies
-(III.E.4) require API data to be deleted or refreshed within 30 days, and an
-immutable GCS archive cannot honour that. So the YouTube pipeline writes
-straight to ClickHouse, and every YouTube-derived table — including the derived
-`promo_top10_bridge` — carries `TTL … INTERVAL 30 DAY`. The refresh cadence is
-deliberately 21 days, so rows are renewed before the TTL fires.
-
-Statistics fields are `Nullable(UInt64)`, because YouTube returns *absent*
-rather than zero when a creator hides likes or disables comments. Recording
-those as `0` would silently corrupt every average.
-
-Channel identity is pinned to the immutable `UC…` channel id, never the handle.
-Several Netflix-looking handles are squatted or have been reassigned;
-`scripts/youtube/channels.json` records the 44 verified channels along with the
-impostors that were excluded and why.
-
-Ratios such as hours-per-clip are computed by Streamlens and labelled as such in
-the UI. They are not YouTube or Netflix metrics.
-
----
-
-## Licence
+## License
 
 [MIT](LICENSE).

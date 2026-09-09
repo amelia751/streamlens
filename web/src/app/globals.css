@@ -3586,6 +3586,794 @@ a {
   line-height: 1.5;
 }
 
+/* ------------------------------------------------------------- problem */
+
+/*
+ * Three slides. Each is a drawing over the same box-and-arrow vocabulary as
+ * `/diagram` — bordered cards, a red arrow for every handoff, the real column
+ * names.
+ *
+ * The drawings ship as flat PNGs on white rather than cut-outs, so the band
+ * carries the tint and the image multiplies into it. That hides the white
+ * rectangle without touching the linework, and it degrades to a plain white
+ * band if `mix-blend-mode` is unavailable.
+ */
+
+.problem-page .page-head {
+  max-width: 44rem;
+}
+
+.pb-slide {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  max-width: 60rem;
+  margin-top: 2.75rem;
+  padding-top: 2.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.pb-head {
+  max-width: 38rem;
+}
+
+.pb-head h2 {
+  margin: 0.15rem 0 0;
+  font-size: 1.6rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.pb-note {
+  margin: 0;
+  color: var(--faint);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+
+.pb-note q {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.pb-glyph {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--muted);
+}
+
+/* The drawing. */
+
+.pb-art {
+  display: flex;
+  justify-content: center;
+  margin: 0;
+  padding: 1.6rem 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--wash);
+}
+
+.pb-art-warm {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--yellow) 26%, white);
+}
+
+/* Shrink-wraps the drawing so a callout can be placed against the art
+ * itself rather than against the band, which is much wider than the image. */
+.pb-art-frame {
+  position: relative;
+  max-width: 100%;
+}
+
+/* Capped on height so all three bands sit at the same depth in the scroll. */
+.pb-art img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 15rem;
+  mix-blend-mode: multiply;
+}
+
+/* Pinned to the filmmaker at the left of the relay drawing. */
+.pb-callout {
+  position: absolute;
+  top: 0;
+  left: 14%;
+  max-width: 11rem;
+  margin: 0;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+/* Two stacked triangles make the tail: the border colour, then the fill. */
+.pb-callout::before,
+.pb-callout::after {
+  content: "";
+  position: absolute;
+  top: 0.85rem;
+  border: 0.24rem solid transparent;
+  border-left: 0;
+}
+
+.pb-callout::before {
+  left: -0.24rem;
+  border-right-color: var(--line);
+}
+
+.pb-callout::after {
+  left: -0.17rem;
+  border-right-color: var(--paper);
+}
+
+/* Slide one — the relay. */
+
+.pb-chain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pb-chain li {
+  display: flex;
+  align-items: center;
+}
+
+.pb-chain li + li::before {
+  content: "→";
+  margin: 0 0.5rem;
+  color: var(--accent);
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.pb-chain span {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  font-size: 0.76rem;
+}
+
+.pb-chain li:first-child span {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--blue) 40%, white);
+  font-weight: 600;
+}
+
+.pb-chain li:last-child span {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--green) 38%, white);
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Slide two — the sources that will not join. */
+
+.pb-islands {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+
+.pb-island {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.7rem 0.75rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+}
+
+.pb-island header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.pb-island b {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.pb-island i {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 0.72rem;
+}
+
+.pb-island code {
+  align-self: flex-start;
+  margin-top: 0.2rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--wash));
+  color: var(--accent);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.68rem;
+}
+
+.pb-island img,
+.pb-island .pb-glyph {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  object-fit: contain;
+}
+
+/* Slide three — the conversation. */
+
+.pb-flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.pb-node {
+  display: flex;
+  flex: 1 1 10rem;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.7rem 0.75rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+}
+
+.pb-node header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.pb-node header b {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.pb-node header img {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  object-fit: contain;
+}
+
+.pb-node i {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.pb-node-person {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--green) 32%, white);
+}
+
+.pb-marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.pb-marks img,
+.pb-marks .pb-glyph {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  object-fit: contain;
+}
+
+.pb-arrow {
+  align-self: center;
+  color: var(--accent);
+  font-size: 1.15rem;
+  font-weight: 400;
+  line-height: 1;
+}
+
+@media (max-width: 860px) {
+  .pb-islands {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .pb-flow {
+    flex-direction: column;
+  }
+
+  .pb-arrow {
+    align-self: flex-start;
+    margin-left: 1.25rem;
+    transform: rotate(90deg);
+  }
+}
+
+/* ------------------------------------------------------------- diagram */
+
+/*
+ * The architecture figure is one wide grid that scrolls sideways rather than
+ * reflowing. Reflowing it would break the reading order — the whole point is
+ * that sources sit left of the warehouse and the warehouse sits above what
+ * serves it — so `.diagram` clips and `.dg` keeps a floor width.
+ */
+
+.diagram-page .page-head {
+  max-width: 44rem;
+}
+
+.diagram {
+  margin: 0;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.dg {
+  display: grid;
+  min-width: 74rem;
+  grid-template-columns:
+    minmax(13rem, 0.95fr) 2.8rem minmax(15rem, 1.15fr)
+    2.8rem minmax(12.5rem, 0.9fr) minmax(14rem, 1fr);
+  grid-template-rows: auto 1fr auto auto auto auto;
+  grid-template-areas:
+    "src   a1    ware  a2    tools cloud"
+    "yt    .     ware  .     tools cloud"
+    "tail  tail  tail  tail  tail tail"
+    "serve serve serve serve serve serve"
+    "tail2 tail2 tail2 tail2 tail2 tail2"
+    "web   web   web   web   web  web";
+  gap: 0.55rem 0.4rem;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.dg code {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.72rem;
+}
+
+.dg .kicker {
+  display: flex;
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.dg .kicker i {
+  font-style: normal;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.dg-ico {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--muted);
+}
+
+.dg-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.76rem;
+}
+
+.dg-brand img {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  object-fit: contain;
+}
+
+.dg-brand b {
+  font-weight: 600;
+}
+
+.dg-brand i {
+  font-style: normal;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.dg-box,
+.dg-host {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+}
+
+.dg-box {
+  align-self: start;
+  padding: 0.75rem 0.85rem 0.85rem;
+}
+
+.dg-box > header,
+.dg-registry header,
+.dg-agent header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.35rem;
+}
+
+.dg-sub {
+  margin: 0 0 0.55rem;
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+/* Sources and ingest — the left column. */
+
+.dg-src {
+  grid-area: src;
+  background: color-mix(in srgb, var(--green) 34%, white);
+  border-color: transparent;
+}
+
+.dg-yt {
+  grid-area: yt;
+  background: var(--wash);
+}
+
+.dg-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dg-rows li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem 0.4rem;
+  padding: 0.18rem 0;
+  font-size: 0.76rem;
+}
+
+.dg-rows li > b {
+  font-weight: 600;
+}
+
+.dg-rows li > i,
+.dg-rows li .dg-brand + i {
+  flex-basis: 100%;
+  padding-left: 1.4rem;
+  font-style: normal;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+/*
+ * Arrows between the columns. Both live in the first grid row, whose height
+ * is set by the sources box — so centring lands them against the middle of
+ * the boxes they join rather than the much taller toolsets column.
+ */
+
+.dg-arrow {
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  font-size: 0.56rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--muted);
+}
+
+.dg-arrow b {
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.dg-a1 {
+  grid-area: a1;
+}
+
+.dg-a2 {
+  grid-area: a2;
+}
+
+.dg-down {
+  text-align: center;
+  font-size: 1rem;
+  line-height: 0.7;
+  color: var(--accent);
+  margin: 0.3rem 0;
+}
+
+.dg-tail {
+  text-align: center;
+  font-size: 1rem;
+  line-height: 0.7;
+  color: var(--accent);
+  margin: -0.15rem 0;
+}
+
+.dg-tail-a {
+  grid-area: tail;
+}
+
+.dg-tail-b {
+  grid-area: tail2;
+}
+
+.dg-plus {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* The three hosts — warehouse, API, browser. */
+
+.dg-host {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.6rem;
+  background: var(--wash);
+}
+
+.dg-hostbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.7rem;
+  padding: 0.1rem 0.2rem 0.3rem;
+}
+
+.dg-db,
+.dg-registry,
+.dg-agent,
+.dg-room,
+.dg-sub-box {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  background: var(--paper);
+}
+
+.dg-sub-box p,
+.dg-db p,
+.dg-registry p,
+.dg-agent p,
+.dg-room p {
+  margin: 0.2rem 0 0;
+  font-size: 0.74rem;
+}
+
+.dg-sub-box p,
+.dg-db p {
+  color: var(--muted);
+}
+
+.dg-sub-box p b,
+.dg-db p b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.dg-foot {
+  margin: 0.4rem 0 0 !important;
+  font-size: 0.69rem !important;
+  line-height: 1.45;
+  color: var(--faint) !important;
+}
+
+.dg-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.4rem !important;
+}
+
+.dg-flags span {
+  padding: 0.14rem 0.45rem;
+  border-radius: 6px;
+  background: var(--wash);
+  border: 1px solid var(--line);
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+/* ClickHouse Cloud. */
+
+.dg-ware {
+  grid-area: ware;
+  align-self: start;
+  background: color-mix(in srgb, var(--yellow) 22%, white);
+  border-color: color-mix(in srgb, var(--yellow) 55%, white);
+}
+
+.dg-db .kicker {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  color: var(--muted);
+}
+
+/* The agent's tools, and the cloud they run in. */
+
+.dg-tools {
+  grid-area: tools;
+  background: color-mix(in srgb, var(--purple) 14%, white);
+  border-color: transparent;
+}
+
+.dg-cloud {
+  grid-area: cloud;
+  background: color-mix(in srgb, var(--blue) 26%, white);
+  border-color: transparent;
+}
+
+.dg-group {
+  margin-top: 0.5rem;
+}
+
+.dg-group .kicker {
+  color: var(--tone, var(--muted));
+  margin-bottom: 0.2rem;
+}
+
+/* A group headed by a service rather than a word takes the vendor mark. */
+.dg-group > .dg-brand {
+  display: flex;
+  margin-bottom: 0.25rem;
+}
+
+.dg-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dg-group li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.1rem 0.35rem;
+  padding: 0.16rem 0.4rem;
+  margin: 0.1rem 0;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--tone, var(--line));
+  border-radius: 6px;
+  background: var(--paper);
+}
+
+.dg-group li > i {
+  flex-basis: 100%;
+  padding-left: 1.35rem;
+  font-style: normal;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.dg-group li > b {
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+/* The API band. */
+
+.dg-serve {
+  grid-area: serve;
+  background: color-mix(in srgb, var(--purple) 12%, white);
+  border-color: color-mix(in srgb, var(--purple) 35%, white);
+}
+
+.dg-serve-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr 1fr;
+  gap: 0.45rem;
+  align-items: stretch;
+}
+
+.dg-count {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 1.6rem !important;
+  font-weight: 500;
+  line-height: 1;
+  margin: 0.35rem 0 0.15rem !important;
+  color: var(--ink);
+}
+
+.dg-agent-fixed {
+  border-color: color-mix(in srgb, var(--good) 30%, white);
+}
+
+.dg-agent-free {
+  border-color: color-mix(in srgb, var(--purple) 45%, white);
+}
+
+.dg-agent ol {
+  list-style: none;
+  margin: 0.3rem 0 0;
+  padding: 0;
+}
+
+.dg-agent li {
+  display: grid;
+  grid-template-columns: 0.7rem 8.4rem 1fr;
+  align-items: baseline;
+  gap: 0.25rem;
+  padding: 0.09rem 0;
+  font-size: 0.72rem;
+}
+
+.dg-agent li span {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.dg-tools .dg-group li {
+  padding: 0.12rem 0.4rem;
+}
+
+/* The browser band. */
+
+.dg-web {
+  grid-area: web;
+  background: color-mix(in srgb, var(--teal) 16%, white);
+  border-color: color-mix(in srgb, var(--teal) 45%, white);
+}
+
+.dg-rooms {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.45rem;
+  align-items: stretch;
+}
+
+.dg-room {
+  border-left: 3px solid var(--tone, var(--line));
+}
+
+.dg-room .kicker {
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+.dg-room .dg-brand {
+  margin-top: 0.4rem;
+}
+
+.diagram figcaption {
+  max-width: 44rem;
+  margin: 1rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
 @media (max-width: 1100px) {
   .studio,
   .studio:has(> .chat) {
