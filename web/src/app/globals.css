@@ -3913,9 +3913,9 @@ a {
 
 /*
  * The architecture figure is one wide grid that scrolls sideways rather than
- * reflowing. Reflowing it would break the reading order — the whole point is
- * that sources sit left of the warehouse and the warehouse sits above what
- * serves it — so `.diagram` clips and `.dg` keeps a floor width.
+ * reflowing. Reflowing it would break the reading order — sources sit left of
+ * the warehouse, the warehouse left of the tools — so `.diagram` clips and
+ * `.dg` keeps a floor width.
  */
 
 .diagram-page .page-head {
@@ -3934,14 +3934,10 @@ a {
   grid-template-columns:
     minmax(13rem, 0.95fr) 2.8rem minmax(15rem, 1.15fr)
     2.8rem minmax(12.5rem, 0.9fr) minmax(14rem, 1fr);
-  grid-template-rows: auto 1fr auto auto auto auto;
+  grid-template-rows: auto 1fr;
   grid-template-areas:
     "src   a1    ware  a2    tools cloud"
-    "yt    .     ware  .     tools cloud"
-    "tail  tail  tail  tail  tail tail"
-    "serve serve serve serve serve serve"
-    "tail2 tail2 tail2 tail2 tail2 tail2"
-    "web   web   web   web   web  web";
+    "yt    .     ware  .     tools cloud";
   gap: 0.55rem 0.4rem;
   font-size: 0.8rem;
   line-height: 1.4;
@@ -4014,9 +4010,7 @@ a {
   padding: 0.75rem 0.85rem 0.85rem;
 }
 
-.dg-box > header,
-.dg-registry header,
-.dg-agent header {
+.dg-box > header {
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -4112,29 +4106,7 @@ a {
   margin: 0.3rem 0;
 }
 
-.dg-tail {
-  text-align: center;
-  font-size: 1rem;
-  line-height: 0.7;
-  color: var(--accent);
-  margin: -0.15rem 0;
-}
-
-.dg-tail-a {
-  grid-area: tail;
-}
-
-.dg-tail-b {
-  grid-area: tail2;
-}
-
-.dg-plus {
-  font-style: normal;
-  font-weight: 700;
-  color: var(--accent);
-}
-
-/* The three hosts — warehouse, API, browser. */
+/* Warehouse host. */
 
 .dg-host {
   display: flex;
@@ -4153,9 +4125,6 @@ a {
 }
 
 .dg-db,
-.dg-registry,
-.dg-agent,
-.dg-room,
 .dg-sub-box {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -4164,10 +4133,7 @@ a {
 }
 
 .dg-sub-box p,
-.dg-db p,
-.dg-registry p,
-.dg-agent p,
-.dg-room p {
+.dg-db p {
   margin: 0.2rem 0 0;
   font-size: 0.74rem;
 }
@@ -4181,30 +4147,6 @@ a {
 .dg-db p b {
   color: var(--ink);
   font-weight: 600;
-}
-
-.dg-foot {
-  margin: 0.4rem 0 0 !important;
-  font-size: 0.69rem !important;
-  line-height: 1.45;
-  color: var(--faint) !important;
-}
-
-.dg-flags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-  margin-top: 0.4rem !important;
-}
-
-.dg-flags span {
-  padding: 0.14rem 0.45rem;
-  border-radius: 6px;
-  background: var(--wash);
-  border: 1px solid var(--line);
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 0.65rem;
-  color: var(--muted);
 }
 
 /* ClickHouse Cloud. */
@@ -4282,96 +4224,8 @@ a {
   font-weight: 600;
 }
 
-/* The API band. */
-
-.dg-serve {
-  grid-area: serve;
-  background: color-mix(in srgb, var(--purple) 12%, white);
-  border-color: color-mix(in srgb, var(--purple) 35%, white);
-}
-
-.dg-serve-grid {
-  display: grid;
-  grid-template-columns: 1fr 1.25fr 1fr;
-  gap: 0.45rem;
-  align-items: stretch;
-}
-
-.dg-count {
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 1.6rem !important;
-  font-weight: 500;
-  line-height: 1;
-  margin: 0.35rem 0 0.15rem !important;
-  color: var(--ink);
-}
-
-.dg-agent-fixed {
-  border-color: color-mix(in srgb, var(--good) 30%, white);
-}
-
-.dg-agent-free {
-  border-color: color-mix(in srgb, var(--purple) 45%, white);
-}
-
-.dg-agent ol {
-  list-style: none;
-  margin: 0.3rem 0 0;
-  padding: 0;
-}
-
-.dg-agent li {
-  display: grid;
-  grid-template-columns: 0.7rem 8.4rem 1fr;
-  align-items: baseline;
-  gap: 0.25rem;
-  padding: 0.09rem 0;
-  font-size: 0.72rem;
-}
-
-.dg-agent li span {
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 0.68rem;
-  color: var(--muted);
-}
-
 .dg-tools .dg-group li {
   padding: 0.12rem 0.4rem;
-}
-
-/* The browser band. */
-
-.dg-web {
-  grid-area: web;
-  background: color-mix(in srgb, var(--teal) 16%, white);
-  border-color: color-mix(in srgb, var(--teal) 45%, white);
-}
-
-.dg-rooms {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0.45rem;
-  align-items: stretch;
-}
-
-.dg-room {
-  border-left: 3px solid var(--tone, var(--line));
-}
-
-.dg-room .kicker {
-  font-family: var(--font-mono), ui-monospace, monospace;
-}
-
-.dg-room .dg-brand {
-  margin-top: 0.4rem;
-}
-
-.diagram figcaption {
-  max-width: 44rem;
-  margin: 1rem 0 0;
-  font-size: 0.78rem;
-  line-height: 1.5;
-  color: var(--muted);
 }
 
 @media (max-width: 1100px) {

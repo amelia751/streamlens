@@ -71,11 +71,13 @@ every named query the rooms can run.
 │   │   ├── studio/           canvas + analyst chat
 │   │   ├── diagram/          the figure above
 │   │   └── problem/          the appendix
-│   └── src/components/
-│       ├── chat.tsx          streams the analyst
-│       ├── canvas.tsx        twelve-column grid the agent writes
-│       ├── proposal.tsx      the one-sheet
-│       └── diagram.tsx       public sources → warehouse → tools → cloud
+│   ├── src/components/
+│   │   ├── chat.tsx          streams the analyst
+│   │   ├── canvas.tsx        twelve-column grid the agent writes
+│   │   ├── proposal.tsx      the one-sheet
+│   │   └── diagram.tsx       public sources → warehouse → tools → cloud
+│   └── scripts/
+│       └── diagram-png.mjs   redraw docs/architecture.png
 │
 ├── scripts/
 │   ├── youtube/              schema, sync, 30-day TTL
